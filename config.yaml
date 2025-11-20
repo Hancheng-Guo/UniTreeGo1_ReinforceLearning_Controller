@@ -1,9 +1,9 @@
 train:
   n_env: 2
-  forward_reward_weight: 1
+  forward_reward_weight: 1.
   ctrl_cost_weight: 0.05
-  contact_cost_weight: 5e-4
-  healthy_reward_weight: 1
+  contact_cost_weight: 5.e-4
+  healthy_reward_weight: 1.
   reset_noise_scale: 0.1
   frame_skip: 25
   max_episode_steps: 1000
@@ -12,10 +12,10 @@ train:
 
 demo:
   log_freq: 1000
-  forward_reward_weight: 1
+  forward_reward_weight: 1.
   ctrl_cost_weight: 0.05
-  contact_cost_weight: 5e-4
-  healthy_reward_weight: 1
+  contact_cost_weight: 5.e-4
+  healthy_reward_weight: 1.
   reset_noise_scale: 0.1
   frame_skip: 25
   max_episode_steps: 1000

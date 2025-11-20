@@ -18,7 +18,7 @@ def main():
 
     model = PPO(policy=CONFIG["algorithm"]["policy"],
                 env=train_env,
-                n_steps=CONFIG["algorithm"]["n_step"],
+                n_steps=CONFIG["algorithm"]["n_steps"],
                 batch_size=CONFIG["algorithm"]["batch_size"],
                 n_epochs=CONFIG["algorithm"]["n_epochs"],
                 gamma=CONFIG["algorithm"]["gamma"],
@@ -26,7 +26,7 @@ def main():
                 device=CONFIG["algorithm"]["device"],
                 verbose=CONFIG["algorithm"]["verbose"],
                 tensorboard_log=CONFIG["path"]["tensorboard"])
-    model.learn(total_timesteps=CONFIG["path"]["total_timesteps"],
+    model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                 callback=RenderCallback(demo_env))
     model.save(CONFIG["path"]["tensorboard"] + datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
 
