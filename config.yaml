@@ -1,11 +1,45 @@
 train:
   n_env: 2
-
+  forward_reward_weight: 1
+  ctrl_cost_weight: 0.05
+  contact_cost_weight: 5e-4
+  healthy_reward_weight: 1
+  reset_noise_scale: 0.1
+  frame_skip: 25
+  max_episode_steps: 1000
+  healthy_z_min: 0.195
+  healthy_z_max: 0.75
 
 demo:
+  log_freq: 1000
+  forward_reward_weight: 1
+  ctrl_cost_weight: 0.05
+  contact_cost_weight: 5e-4
+  healthy_reward_weight: 1
+  reset_noise_scale: 0.1
+  frame_skip: 25
+  max_episode_steps: 1000
+  healthy_z_min: 0.195
+  healthy_z_max: 0.75
 
+algorithm:
+  policy: "MlpPolicy"
+  n_steps: 256
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  device: "cpu"
+  verbose: 1
+  total_timesteps: 100000
 
 path:
   tensorboard: "./logs/"
   tensorboard_log: "custom/"
   checkpoints: "./checkpoints/"
+  model_xml: "./mujoco_menagerie/unitree_go1/scene.xml"
+
+is:
+  param_shared: True
+  model_body_part_visiable: False
+  model_state_def_visiable: True
