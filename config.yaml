@@ -1,0 +1,11 @@
+train:
+  n_env: 2
+
+
+demo:
+
+
+path:
+  tensorboard: "./logs/"
+  tensorboard_log: "custom/"
+  checkpoints: "./checkpoints/"
