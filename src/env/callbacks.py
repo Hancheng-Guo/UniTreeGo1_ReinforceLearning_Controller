@@ -1,6 +1,6 @@
 from stable_baselines3.common.callbacks import BaseCallback
 from time import sleep
-from src.tensorboard.init_log import init_log, update_log
+from src.render.render_tensorboard import init_log, update_log
 from config import CONFIG
 
 class RenderCallback(BaseCallback):
@@ -33,7 +33,6 @@ class RenderCallback(BaseCallback):
             self.logger.dump(self.num_timesteps)
 
         return _step_loop, _step_done
-
 
         
     def _on_step(self) -> bool:
