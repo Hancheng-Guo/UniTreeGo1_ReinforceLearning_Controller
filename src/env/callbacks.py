@@ -4,7 +4,9 @@ from src.tensorboard.init_log import init_log, update_log
 from config import CONFIG
 
 class RenderCallback(BaseCallback):
-    def __init__(self, demo_env, demo_freq=CONFIG["demo"]["log_freq"], verbose=0):
+    def __init__(self, demo_env,
+                 demo_freq=CONFIG["demo"]["log_freq"],
+                 verbose=CONFIG["algorithm"]["verbose"]):
         super().__init__(verbose)
         self.demo_env = demo_env
         self.demo_freq = demo_freq
