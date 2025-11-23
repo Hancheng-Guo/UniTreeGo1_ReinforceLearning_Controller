@@ -23,7 +23,7 @@ class RenderCallback(BaseCallback):
 
             log_data = update_log(log_data, action, obs_predict, obs, reward, terminated, truncated, info)
 
-            sleep(0.02)
+            # sleep(0.02)
             return done
         
         def _step_done():

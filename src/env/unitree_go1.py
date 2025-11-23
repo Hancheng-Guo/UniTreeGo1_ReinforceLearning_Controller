@@ -1,8 +1,15 @@
 import mujoco
 import copy
+import time
+import matplotlib.pyplot as plt
 import numpy as np
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 from src.render.render_matplotlib import init_plt_render
+
+
+def noop(*args, **kwargs):
+    pass
+
 
 class UniTreeGo1Env(AntEnv):
     def __init__(
@@ -14,18 +21,17 @@ class UniTreeGo1Env(AntEnv):
             **kwargs)
         self.healthy_reward_weight = healthy_reward_weight
         self._healthy_pitch_range = healthy_pitch_range
-        plt_render, plt_render_newline = init_plt_render() if self.render_mode == "human" else (None, None)
-        self.plt_render = plt_render
-        self.plt_render_newline = plt_render_newline
+        self.plt_render, self.plt_endline = init_plt_render() if self.render_mode == "human" else (noop, noop)
+        self.plt_timer = time.time()
 
     @property
     def healthy_info(self):
         state = self.state_vector()
         mat = np.zeros((9, 1))
         mujoco.mju_quat2Mat(mat, state[3:7]) # Convert quaternion to 3D rotation matrix
-        yaw = np.arctan2(mat[3], mat[0])
-        pitch = np.arcsin(-mat[6])
-        roll = np.arctan2(mat[7], mat[8])
+        yaw = np.arctan2(mat[3], mat[0])[0]
+        pitch = np.arcsin(-mat[6])[0]
+        roll = np.arctan2(mat[7], mat[8])[0]
         healthy_info = {
             "yaw": yaw,
             "pitch": pitch,
@@ -81,15 +87,16 @@ class UniTreeGo1Env(AntEnv):
             "distance_from_origin": np.linalg.norm(self.data.qpos[0:2], ord=2),
             **reward_info,
         }
+        
+        if time.time() - self.plt_timer > 1:
+            plt.pause(0.00001)
+            self.plt_timer = time.time()
+
         if self.render_mode == "human":
             self.render()
-            self.plt_render(
-                x_velocity=info["x_velocity"],
-                pitch=info["pitch"],
-                z_position=self.state_vector()[2]
-                )
+            self.plt_render(self.state_vector(), info)
             if terminated:
-                self.plt_render_newline()
+                self.plt_endline()
 
         # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
         return observation, reward, terminated, False, info
