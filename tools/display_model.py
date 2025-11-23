@@ -32,7 +32,7 @@ def print_state_space(model, skipped_qpos):
                 print("[%3d] %s:  free joint > %s-axis direction" % (state_count, jname.rjust(n_fill), coordinate_str[j % 4]))
                 state_count += 1
         elif jtype == 1:
-            for j in range(3):
+            for j in range(4):
                 print("[%3d] %s:  ball joint > %s-axis rotation angle component" % (state_count, jname.rjust(n_fill), coordinate_str[j % 4]))
                 state_count += 1
         elif jtype == 2:

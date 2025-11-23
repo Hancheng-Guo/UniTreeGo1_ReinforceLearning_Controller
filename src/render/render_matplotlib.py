@@ -1,0 +1,80 @@
+import math
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+matplotlib.use('QtAgg')
+
+
+def init_plt_render():
+    fig = None
+    plt_data = dict()
+    plt_axes = None
+    plt_n_line = 5
+    plt_line = [[] for _ in range(plt_n_line)]
+    plt_max_col = 3
+    plt.ion()
+
+    def plt_select_kwargs(state, info):
+        selected_kwargs = {
+            "x_velocity": {"value": info["x_velocity"], "needs_unwrap": False},
+            "y_velocity": {"value": info["y_velocity"], "needs_unwrap": False},
+            "z_position": {"value": state[2], "needs_unwrap": False},
+            "x_roll": {"value": info["roll"], "needs_unwrap": True},
+            "y_pitch": {"value": info["pitch"], "needs_unwrap": True},
+            "z_yaw": {"value": info["yaw"], "needs_unwrap": True},
+            }
+        return selected_kwargs
+
+    def plt_newfig(selected_kwargs):
+        nonlocal fig, plt_data, plt_axes, plt_n_line, plt_line, plt_max_col
+        cols = min(plt_max_col, len(selected_kwargs))
+        rows = math.ceil(len(selected_kwargs) / cols)
+        fig, plt_axes = plt.subplots(rows, cols)
+        plt_axes = plt_axes.flatten()
+        for i, (key, _) in enumerate(selected_kwargs.items()):
+            plt_axes[i].relim()
+            plt_axes[i].autoscale_view()
+            plt_axes[i].set_title(key)
+
+    def plt_newline(selected_kwargs):
+        nonlocal fig, plt_data, plt_axes, plt_n_line, plt_line, plt_max_col
+        for i, (key, _) in enumerate(selected_kwargs.items()):
+            plt_data[key] = list()
+            line, = plt_axes[i].plot([], []) 
+            plt_line[0].append(line)
+
+    def plt_plot(selected_kwargs):
+        nonlocal fig, plt_data, plt_axes, plt_n_line, plt_line, plt_max_col
+        for i, (key, value) in enumerate(selected_kwargs.items()):
+            plt_data[key].append(value["value"])
+            line_data = np.unwrap(plt_data[key]) if value["needs_unwrap"] else plt_data[key]
+            plt_line[0][i].set_data(range(len(line_data)), line_data) 
+            plt_axes[i].relim()
+            plt_axes[i].autoscale_view()
+        plt.tight_layout()
+        plt.pause(0.00001)
+
+    def plt_render(state, info):
+        nonlocal fig, plt_data, plt_axes, plt_n_line, plt_line, plt_max_col
+        selected_kwargs = plt_select_kwargs(state, info)
+        if not fig: plt_newfig(selected_kwargs)
+        if not plt_line[0]: plt_newline(selected_kwargs)
+        plt_plot(selected_kwargs)
+
+    def plt_endline():
+        nonlocal fig, plt_data, plt_axes, plt_n_line, plt_line, plt_max_col
+        plt_data = dict()
+        for line in plt_line[0]:
+            line.set_alpha(1)
+        for line in plt_line[len(plt_line) - 1]:
+            line.remove()
+        for i in range(len(plt_line) - 1, 0, -1):
+            plt_line[i] = plt_line[i - 1]
+            for line in plt_line[i]:
+                line.set_alpha(line.get_alpha() - 1 / plt_n_line)
+        plt_line[0] = list()
+    
+    return plt_render, plt_endline
+
+

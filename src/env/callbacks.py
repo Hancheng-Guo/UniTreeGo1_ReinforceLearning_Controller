@@ -1,10 +1,12 @@
 from stable_baselines3.common.callbacks import BaseCallback
 from time import sleep
-from src.tensorboard.init_log import init_log, update_log
+from src.render.render_tensorboard import init_log, update_log
 from config import CONFIG
 
 class RenderCallback(BaseCallback):
-    def __init__(self, demo_env, demo_freq=CONFIG["demo"]["log_freq"], verbose=0):
+    def __init__(self, demo_env,
+                 demo_freq=CONFIG["demo"]["log_freq"],
+                 verbose=CONFIG["algorithm"]["verbose"]):
         super().__init__(verbose)
         self.demo_env = demo_env
         self.demo_freq = demo_freq
@@ -21,7 +23,7 @@ class RenderCallback(BaseCallback):
 
             log_data = update_log(log_data, action, obs_predict, obs, reward, terminated, truncated, info)
 
-            sleep(0.02)
+            # sleep(0.02)
             return done
         
         def _step_done():
@@ -31,7 +33,6 @@ class RenderCallback(BaseCallback):
             self.logger.dump(self.num_timesteps)
 
         return _step_loop, _step_done
-
 
         
     def _on_step(self) -> bool:

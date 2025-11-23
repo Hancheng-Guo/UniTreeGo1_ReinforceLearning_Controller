@@ -1,0 +1,7 @@
+.vscode
+__pycache__
+logs/
+checkpoints/
+src/env/__pycache__
+src/render/__pycache__
+tools/__pycache__

@@ -1,5 +1,8 @@
+import subprocess
+import threading
 from dataclasses import dataclass
 from typing import Optional, List
+from config import CONFIG
 
 
 @dataclass
@@ -9,6 +12,14 @@ class LogData:
     # encoders: Optional[List[float]] = None
     # battery: Optional[float] = None
 
+
+def run_tensorboard():
+    result = subprocess.run("tensorboard --logdir " + CONFIG["path"]["tensorboard"], shell=True)
+    print(result.stdout)
+
+def init_tensorboard():
+    t = threading.Thread(target=run_tensorboard)
+    t.start()
 
 def init_log():
     return LogData()

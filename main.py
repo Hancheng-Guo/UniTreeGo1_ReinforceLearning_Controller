@@ -2,7 +2,7 @@ from stable_baselines3 import PPO
 from datetime import datetime
 
 from config import CONFIG
-from src.tensorboard.init_tensorboard import init_tensorboard
+from src.render.render_tensorboard import init_tensorboard
 from src.env.make_env import make_env
 from tools.display_model import display_model
 from src.env.callbacks import RenderCallback
