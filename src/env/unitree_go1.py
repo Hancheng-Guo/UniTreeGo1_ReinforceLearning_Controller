@@ -84,8 +84,9 @@ class UniTreeGo1Env(AntEnv):
         if self.render_mode == "human":
             self.render()
             self.plt_render(
-                x_position=info["x_position"],
+                x_velocity=info["x_velocity"],
                 pitch=info["pitch"],
+                z_position=self.state_vector()[2]
                 )
             if terminated:
                 self.plt_render_newline()

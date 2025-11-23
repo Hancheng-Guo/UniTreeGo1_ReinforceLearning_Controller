@@ -28,7 +28,7 @@ demo:
 
 algorithm:
   policy: "MlpPolicy"
-  n_steps: 128
+  n_steps: 64
   batch_size: 64
   n_epochs: 10
   gamma: 0.99
