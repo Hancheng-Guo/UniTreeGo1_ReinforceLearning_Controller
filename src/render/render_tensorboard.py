@@ -18,7 +18,7 @@ def run_tensorboard():
     print(result.stdout)
 
 def init_tensorboard():
-    t = threading.Thread(target=run_tensorboard)
+    t = threading.Thread(target=run_tensorboard, daemon=True)
     t.start()
 
 def init_log():

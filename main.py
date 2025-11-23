@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+from stable_baselines3.common.logger import configure, Logger
 from stable_baselines3 import PPO
 from datetime import datetime
 
@@ -16,6 +18,7 @@ def main():
     demo_env  = make_env("demo")
     display_model(train_env)
 
+    model_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     model = PPO(policy=CONFIG["algorithm"]["policy"],
                 env=train_env,
                 n_steps=CONFIG["algorithm"]["n_steps"],
@@ -25,11 +28,17 @@ def main():
                 gae_lambda=CONFIG["algorithm"]["gae_lambda"],
                 device=CONFIG["algorithm"]["device"],
                 verbose=CONFIG["algorithm"]["verbose"],
-                tensorboard_log=CONFIG["path"]["tensorboard"])
+                tensorboard_log=CONFIG["path"]["tensorboard"],
+                )
     model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
-                callback=RenderCallback(demo_env))
-    model.save(CONFIG["path"]["tensorboard"] + datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
+                tb_log_name=model_name,
+                callback=RenderCallback(demo_env),
+                )
+    model.save(CONFIG["path"]["checkpoints"] + model_name)
 
+    train_env.close()
+    demo_env.close()
+    plt.close('all')
 
 if __name__ == "__main__":
     main()
