@@ -3,7 +3,6 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
-matplotlib.use('QtAgg')
 
 
 def init_plt_render():
@@ -23,6 +22,9 @@ def init_plt_render():
             "x_roll": {"value": info["roll"], "needs_unwrap": True},
             "y_pitch": {"value": info["pitch"], "needs_unwrap": True},
             "z_yaw": {"value": info["yaw"], "needs_unwrap": True},
+            "reward_forward": {"value": info["reward_forward"], "needs_unwrap": False},
+            "costs": {"value": info["reward_ctrl"] + info["reward_contact"], "needs_unwrap": False},
+            "reward_total": {"value": info["reward_total"], "needs_unwrap": False},
             }
         return selected_kwargs
 
@@ -30,7 +32,7 @@ def init_plt_render():
         nonlocal fig, plt_data, plt_axes, plt_n_line, plt_line, plt_max_col
         cols = min(plt_max_col, len(selected_kwargs))
         rows = math.ceil(len(selected_kwargs) / cols)
-        fig, plt_axes = plt.subplots(rows, cols)
+        fig, plt_axes = plt.subplots(rows, cols, figsize=(2*cols, 2*rows)) # default figsize=(6.4, 4.8)
         plt_axes = plt_axes.flatten()
         for i, (key, _) in enumerate(selected_kwargs.items()):
             plt_axes[i].relim()
