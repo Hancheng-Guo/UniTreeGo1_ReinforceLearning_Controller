@@ -23,6 +23,13 @@ class UniTreeGo1Env(AntEnv):
         self._healthy_pitch_range = healthy_pitch_range
         self.plt_render, self.plt_endline = init_plt_render() if self.render_mode == "human" else (noop, noop)
         self.plt_timer = time.time()
+        if self.render_mode == "human":
+            self.render()
+            camera_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, "tracking")
+            self.mujoco_renderer.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+            self.mujoco_renderer.viewer.cam.fixedcamid = camera_id
+            self.camera_id = camera_id
+            self.mujoco_renderer.camera_id = camera_id
 
     @property
     def healthy_info(self):
@@ -74,6 +81,11 @@ class UniTreeGo1Env(AntEnv):
         x_velocity = forward_info["x_velocity"]
         return x_velocity * self._forward_reward_weight
     
+    def render(self, render_mode=None):
+        if render_mode:
+            return self.mujoco_renderer.render(render_mode)
+        return self.mujoco_renderer.render(self.render_mode)
+    
     def step(self, action):
         self.data_old =  copy.deepcopy(self.data)
         self.do_simulation(action, self.frame_skip)
@@ -117,6 +129,7 @@ class UniTreeGo1Env(AntEnv):
             "reward_ctrl": -ctrl_cost,
             "reward_contact": -contact_cost,
             "reward_alive": alive_reward,
+            "reward_total": reward,
             **self.forward_info,
             **self.healthy_info,
         }

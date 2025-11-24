@@ -1,0 +1,44 @@
+import json
+import os
+from config import CONFIG
+from anytree import Node, RenderTree, find
+
+
+def from_dict(json_dict, parent=None):
+    node = Node(json_dict["name"], parent=parent)
+    for child in json_dict["children"]:
+        from_dict(child, node)
+    return node
+
+
+def to_dict(node):
+    json_dict = {
+        "name": node.name,
+        "children": [to_dict(c) for c in node.children]
+        }
+    return json_dict
+
+
+def to_markdown(root):
+    md_path = CONFIG["path"]["checkpoints"] + "checkpoint_tree.md"
+    with open(md_path, "w", encoding="utf-8") as f:
+        for pre, fill, node in RenderTree(root):
+            marker = "**" if os.path.isfile("%s%s.zip" % (CONFIG["path"]["checkpoints"], node.name)) else "~~"
+            print(f"{pre}{marker}{node.name}{marker}", file=f)
+
+
+def update_checkpoints_tree(child, parent="root"):
+    json_path = CONFIG["path"]["checkpoints"] + "checkpoint_tree.json"
+    with open(json_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    root = from_dict(data)
+
+    node = find(root, lambda n: n.name == parent)
+    if node:
+        Node(child, parent=node)
+    else:
+        Node(child, parent=root)
+
+    json_dict = to_dict(root)
+    json.dump(json_dict, open(json_path, "w"), ensure_ascii=False, indent=2)
+    to_markdown(root)

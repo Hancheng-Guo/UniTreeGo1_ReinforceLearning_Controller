@@ -2,6 +2,9 @@
 __pycache__
 logs/
 checkpoints/
+demo/
 src/env/__pycache__
 src/render/__pycache__
-tools/__pycache__
+src/runner/__pycache__
+src/common/__pycache__
+assets/__pycache__
