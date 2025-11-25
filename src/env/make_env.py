@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 from stable_baselines3.common.env_util import make_vec_env
 
 import src.env.init_env
-from config import CONFIG
+from src.config.config import CONFIG
 
 
 def modify_model_camera():

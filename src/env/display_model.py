@@ -1,5 +1,5 @@
 import stable_baselines3
-from config import CONFIG
+from src.config.config import CONFIG
 
 
 def extract_gym_env(env):
