@@ -80,12 +80,17 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
         _, plt_index = get_next_filename(filepath, "plt_", ".gif")
         _, mjc_index = get_next_filename(filepath, "mjc_", ".gif")
         target_index = max(plt_index, mjc_index) + 1
+
         for i in range(n_tests):
             plt_frames = []
             mjc_frames = []
+
             for _ in range(max_steps):
                 action, _ = model.predict(obs, deterministic=True)
                 obs, reward, terminated, truncated, info = env.step(action)
+                if terminated or truncated:
+                    obs, info = env.reset()
+                    break
 
                 plt_fig = plt.gcf()
                 buffer = io.BytesIO()
@@ -97,12 +102,9 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
                 mjc_fig = env.env.env.env.render("rgb_array")
                 mjc_frames.append(mjc_fig)
 
-                if terminated or truncated:
-                    imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt)
-                    imageio.mimsave(filepath + "mjc_%d.gif" % target_index, mjc_frames, fps=1/world_dt)
-                    target_index += 1
-                    obs, info = env.reset()
-                    # break
+            imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt)
+            imageio.mimsave(filepath + "mjc_%d.gif" % target_index, mjc_frames, fps=1/world_dt)
+            target_index += 1
                     
         env.close()
         plt.close('all')
