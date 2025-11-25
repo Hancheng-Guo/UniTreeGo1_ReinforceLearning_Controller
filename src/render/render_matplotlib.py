@@ -5,11 +5,11 @@ import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 
 
-def init_plt_render():
+def init_plt_render(plt_clr=False):
     fig = None
     plt_data = dict()
     plt_axes = None
-    plt_n_line = 5
+    plt_n_line = 1 if plt_clr else 5
     plt_line = [[] for _ in range(plt_n_line)]
     plt_max_col = 3
     plt.ion()
