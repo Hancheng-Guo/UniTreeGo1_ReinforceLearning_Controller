@@ -30,15 +30,18 @@ algorithm:
   gae_lambda: 0.95
   device: "cpu"
   verbose: 1
-  total_timesteps: 100000
+  total_timesteps: 10
 
 path:
-  tensorboard: "./logs/"
+  demo: "./output/demos/"
+  env_backup: "./output/envs/"
+  config_backup: "./output/configs/"
+  checkpoints: "./output/checkpoints/"
+  tensorboard: "./output/logs/"
   tensorboard_log: "custom/"
-  checkpoints: "./checkpoints/"
   model_dir_original: "./assets/mujoco_menagerie/unitree_go1/"
   model_dir_modified: "./assets/model/"
-  demo: "./demo/"
+  env_class_py: "./src/env/unitree_go1.py"
 
 is:
   param_shared: True

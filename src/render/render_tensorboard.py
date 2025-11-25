@@ -2,7 +2,7 @@ import subprocess
 import threading
 from dataclasses import dataclass
 from typing import Optional, List
-from config import CONFIG
+from src.config.config import CONFIG
 
 
 @dataclass

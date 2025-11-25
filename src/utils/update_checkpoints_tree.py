@@ -1,6 +1,6 @@
 import json
 import os
-from config import CONFIG
+from src.config.config import CONFIG
 from anytree import Node, RenderTree, find
 
 
@@ -19,12 +19,13 @@ def to_dict(node):
     return json_dict
 
 
-def to_markdown(root):
-    md_path = CONFIG["path"]["checkpoints"] + "checkpoint_tree.md"
+def to_txt(root):
+    md_path = CONFIG["path"]["checkpoints"] + "checkpoint_tree.txt"
     with open(md_path, "w", encoding="utf-8") as f:
         for pre, fill, node in RenderTree(root):
-            marker = "**" if os.path.isfile("%s%s.zip" % (CONFIG["path"]["checkpoints"], node.name)) else "~~"
-            print(f"{pre}{marker}{node.name}{marker}", file=f)
+            marker = "" if os.path.isfile("%s%s.zip" % (CONFIG["path"]["checkpoints"], node.name)) else "*"
+            print(f"{pre}{node.name}{marker}", file=f)
+        print("\n\n\nNote: Models marked with * have been deleted.", file=f)
 
 
 def update_checkpoints_tree(child, parent="root"):
@@ -41,4 +42,4 @@ def update_checkpoints_tree(child, parent="root"):
 
     json_dict = to_dict(root)
     json.dump(json_dict, open(json_path, "w"), ensure_ascii=False, indent=2)
-    to_markdown(root)
+    to_txt(root)
