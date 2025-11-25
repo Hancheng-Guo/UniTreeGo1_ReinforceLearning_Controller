@@ -30,7 +30,7 @@ algorithm:
   gae_lambda: 0.95
   device: "cpu"
   verbose: 1
-  total_timesteps: 10
+  total_timesteps: 100000
 
 path:
   demo: "./output/demos/"
