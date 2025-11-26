@@ -1,7 +1,8 @@
 from stable_baselines3.common.callbacks import BaseCallback
 from time import sleep
 from src.render.render_tensorboard import init_log, update_log
-from config import CONFIG
+from src.config.config import CONFIG
+
 
 class RenderCallback(BaseCallback):
     def __init__(self, demo_env,
@@ -9,7 +10,8 @@ class RenderCallback(BaseCallback):
                  verbose=CONFIG["algorithm"]["verbose"]):
         super().__init__(verbose)
         self.demo_env = demo_env
-        self.demo_freq = demo_freq
+        n_stpes_per_epoch = CONFIG["algorithm"]["n_steps"] * CONFIG["train"]["n_envs"]
+        self.demo_freq = n_stpes_per_epoch if (demo_freq <= n_stpes_per_epoch) else (demo_freq // n_stpes_per_epoch)
     
     def _init_step_loop(self):
         obs, info = self.demo_env.reset()

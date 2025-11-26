@@ -1,7 +1,8 @@
 .vscode
 __pycache__
-logs/
-checkpoints/
+my_main.py
 src/env/__pycache__
 src/render/__pycache__
-tools/__pycache__
+src/runner/__pycache__
+src/utils/__pycache__
+assets/__pycache__

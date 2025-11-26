@@ -2,7 +2,7 @@ import subprocess
 import threading
 from dataclasses import dataclass
 from typing import Optional, List
-from config import CONFIG
+from src.config.config import CONFIG
 
 
 @dataclass
@@ -18,7 +18,7 @@ def run_tensorboard():
     print(result.stdout)
 
 def init_tensorboard():
-    t = threading.Thread(target=run_tensorboard)
+    t = threading.Thread(target=run_tensorboard, daemon=True)
     t.start()
 
 def init_log():
