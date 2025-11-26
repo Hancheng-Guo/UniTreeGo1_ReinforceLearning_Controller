@@ -61,6 +61,7 @@ def ppo_train(base_model_name=None, demo=False):
     train_env.close()
     plt.close('all')
 
+    print("\nModel %s traning accomplished!\n" % model_name)
     return model_name
 
 
@@ -102,11 +103,12 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
                 mjc_fig = env.env.env.env.render("rgb_array")
                 mjc_frames.append(mjc_fig)
 
-            imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt)
-            imageio.mimsave(filepath + "mjc_%d.gif" % target_index, mjc_frames, fps=1/world_dt)
+            imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt, loop=0)
+            imageio.mimsave(filepath + "mjc_%d.gif" % target_index, mjc_frames, fps=1/world_dt, loop=0)
             target_index += 1
                     
         env.close()
         plt.close('all')
 
-        return model_name
+    print("\nModel %s test accomplished!\n" % model_name)
+    return model_name
