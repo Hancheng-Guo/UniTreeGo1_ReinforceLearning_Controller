@@ -10,7 +10,7 @@ from datetime import datetime
 from PIL import Image
 
 from src.config.config import CONFIG, update_CONFIG, save_CONFIG
-from src.render.render_tensorboard import init_tensorboard
+from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
 from src.env.callbacks import RenderCallback
@@ -19,7 +19,9 @@ from src.utils.update_checkpoints_tree import update_checkpoints_tree
 
 def ppo_train(base_model_name=None, demo=False):
 
-    init_tensorboard()
+    note = input("\nPlease enter the notes for the current training model:\n > ")
+    tensorboard_thread = ThreadTensorBoard()
+    tensorboard_thread.run()
 
     model_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     train_env = make_env("train")
@@ -54,10 +56,11 @@ def ppo_train(base_model_name=None, demo=False):
                     )
     
     model.save(CONFIG["path"]["checkpoints"] + model_name + ".zip")
-    update_checkpoints_tree(child=model_name, parent=base_model_name)
+    update_checkpoints_tree(child=model_name, parent=base_model_name, note=note)
     shutil.copy2(CONFIG["path"]["env_class_py"], CONFIG["path"]["env_backup"] + model_name + ".py")
     save_CONFIG(CONFIG["path"]["config_backup"] + model_name + ".yaml")
     
+    tensorboard_thread.stop()
     train_env.close()
     plt.close('all')
 
