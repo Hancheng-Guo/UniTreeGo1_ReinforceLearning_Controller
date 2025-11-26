@@ -58,7 +58,8 @@ class UniTreeGo1Env(AntEnv):
     def is_alive(self):
         state = self.state_vector()
         min_z, max_z = self._healthy_z_range
-        is_alive = np.isfinite(state).all() and min_z <= state[2] <= max_z
+        min_pitch, max_pitch = self._healthy_pitch_range
+        is_alive = np.isfinite(state).all() and min_z <= state[2] <= max_z and min_pitch <= self.healthy_info["pitch"] <= max_pitch
         return is_alive
 
     @property
