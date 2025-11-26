@@ -1,5 +1,6 @@
 .vscode
 __pycache__
+my_main.py
 src/env/__pycache__
 src/render/__pycache__
 src/runner/__pycache__
