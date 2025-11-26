@@ -5,7 +5,7 @@ from anytree import Node, RenderTree, find
 
 
 def from_dict(json_dict, parent=None):
-    node = Node(json_dict["name"], parent=parent)
+    node = Node(json_dict["name"], parent=parent, note=json_dict["note"])
     for child in json_dict["children"]:
         from_dict(child, node)
     return node
@@ -14,7 +14,8 @@ def from_dict(json_dict, parent=None):
 def to_dict(node):
     json_dict = {
         "name": node.name,
-        "children": [to_dict(c) for c in node.children]
+        "note": node.note,
+        "children": [to_dict(c) for c in node.children],
         }
     return json_dict
 
@@ -24,11 +25,11 @@ def to_txt(root):
     with open(md_path, "w", encoding="utf-8") as f:
         for pre, fill, node in RenderTree(root):
             marker = "" if os.path.isfile("%s%s.zip" % (CONFIG["path"]["checkpoints"], node.name)) else "*"
-            print(f"{pre}{node.name}{marker}", file=f)
+            print(f"{pre}{node.name}{marker}\t({node.note})", file=f)
         print("\n\n\nNote: Models marked with * have been deleted.", file=f)
 
 
-def update_checkpoints_tree(child, parent="root"):
+def update_checkpoints_tree(child, parent="root", note=""):
     json_path = CONFIG["path"]["checkpoints"] + "checkpoint_tree.json"
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -36,9 +37,9 @@ def update_checkpoints_tree(child, parent="root"):
 
     node = find(root, lambda n: n.name == parent)
     if node:
-        Node(child, parent=node)
+        Node(child, parent=node, note=note)
     else:
-        Node(child, parent=root)
+        Node(child, parent=root, note=note)
 
     json_dict = to_dict(root)
     json.dump(json_dict, open(json_path, "w"), ensure_ascii=False, indent=2)

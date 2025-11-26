@@ -19,6 +19,7 @@ from src.utils.update_checkpoints_tree import update_checkpoints_tree
 
 def ppo_train(base_model_name=None, demo=False):
 
+    note = input("\nPlease enter the notes for the current training model:\n")
     init_tensorboard()
 
     model_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -54,7 +55,7 @@ def ppo_train(base_model_name=None, demo=False):
                     )
     
     model.save(CONFIG["path"]["checkpoints"] + model_name + ".zip")
-    update_checkpoints_tree(child=model_name, parent=base_model_name)
+    update_checkpoints_tree(child=model_name, parent=base_model_name, note=note)
     shutil.copy2(CONFIG["path"]["env_class_py"], CONFIG["path"]["env_backup"] + model_name + ".py")
     save_CONFIG(CONFIG["path"]["config_backup"] + model_name + ".yaml")
     
