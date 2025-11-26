@@ -1,0 +1,50 @@
+train:
+  n_envs: 4
+  forward_reward_weight: 1.
+  ctrl_cost_weight: 0.05
+  contact_cost_weight: 5.e-4
+  healthy_reward_weight: 1.
+  reset_noise_scale: 0.1
+  frame_skip: 5
+  max_episode_steps: 1000
+  healthy_z_min: 0.195
+  healthy_z_max: 0.75
+  healthy_pitch_min: -0.524
+  healthy_pitch_max: 0.524
+
+demo:
+  log_freq: 512
+  healthy_z_min: 0.195
+  healthy_z_max: 0.75
+  healthy_pitch_min: -0.524
+  healthy_pitch_max: 0.524
+  camera_pos: "0 -4 3.2"
+  camera_xyaxes: "1 0 0 0 1 1"
+
+algorithm:
+  policy: "MlpPolicy"
+  n_steps: 128
+  batch_size: 64
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  device: "cpu"
+  verbose: 1
+  total_timesteps: 100000
+
+path:
+  demo: "./output/demos/"
+  env_backup: "./output/envs/"
+  config_backup: "./output/configs/"
+  checkpoints: "./output/checkpoints/"
+  tensorboard: "./output/logs/"
+  tensorboard_log: "custom/"
+  model_dir_original: "./assets/mujoco_menagerie/unitree_go1/"
+  model_dir_modified: "./assets/model/"
+  env_class_py: "./src/env/unitree_go1.py"
+
+is:
+  param_shared: True
+  model_body_part_visiable: False
+  model_state_def_visiable: True
+  model_camera_modified: True

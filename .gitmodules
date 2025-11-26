@@ -1,3 +1,6 @@
-[submodule "mujoco_menagerie"]
-	path = mujoco_menagerie
+[submodule "assets/mujoco_menagerie"]
+	path = assets/mujoco_menagerie
 	url = https://github.com/google-deepmind/mujoco_menagerie.git
+[submodule "output"]
+	path = output
+	url = https://github.com/Hancheng-Guo/UniTreeGo1_ReinforceLearning_Controller_Data.git
