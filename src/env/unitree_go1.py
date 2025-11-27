@@ -51,8 +51,11 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def healthy_reward(self):
-        healthy_info = self.healthy_info
-        return 1 * self.healthy_reward_weight
+        yaw = self.healthy_info["yaw"]
+        yaw_reward_min = 0.05
+        yaw_reward_alpha = -np.log(yaw_reward_min) / np.square(np.pi)
+        yaw_reward = np.exp(-yaw_reward_alpha * np.square(yaw))
+        return yaw_reward * self.healthy_reward_weight
     
     @property
     def is_alive(self):
