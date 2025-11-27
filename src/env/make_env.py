@@ -67,7 +67,11 @@ def make_train_env(*args, **kwargs):
 
 def make_demo_env(*args, **kwargs):
     env_mode = "train" if CONFIG["is"]["param_shared"] else "demo"
-    return make_gym_env(env_mode, render_mode="human", *args, **kwargs)
+    return make_gym_env(env_mode,
+                        render_mode="human",
+                        width=CONFIG["demo"]["mjc_render_width"],
+                        height=CONFIG["demo"]["mjc_render_height"],
+                        *args, **kwargs)
 
     
 def make_env(mode, *args, **kwargs):

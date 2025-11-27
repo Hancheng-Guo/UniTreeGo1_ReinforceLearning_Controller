@@ -75,10 +75,11 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
         env = make_env("demo", demo_type="single")
         model = PPO.load(CONFIG["path"]["checkpoints"] + model_name,
                          env=env,
+                         device=CONFIG["algorithm"]["device"]
                          )
         obs, info = env.reset()
 
-        world_dt = env.env.env.env.dt *env.env.env.env.frame_skip
+        world_dt = env.env.env.env.dt * env.env.env.env.frame_skip
         filepath = CONFIG["path"]["demo"] + model_name.split('.')[0] + "/"
         if not os.path.exists(filepath):
             os.makedirs(filepath)
@@ -94,7 +95,6 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
                 action, _ = model.predict(obs, deterministic=True)
                 obs, reward, terminated, truncated, info = env.step(action)
                 if terminated or truncated:
-                    obs, info = env.reset()
                     break
 
                 plt_fig = plt.gcf()
@@ -107,8 +107,18 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
                 mjc_fig = env.env.env.env.render("rgb_array")
                 mjc_frames.append(mjc_fig)
 
-            imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt, loop=0)
-            imageio.mimsave(filepath + "mjc_%d.gif" % target_index, mjc_frames, fps=1/world_dt, loop=0)
+            env.env.env.env.plt_endline()
+            obs, info = env.reset()
+            imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt,
+                            loop=0, subrectangles=True, palettesize=4, optimize=True)
+            # mjc_frames = [
+            #     Image.fromarray(frame).resize(
+            #         (frame.shape[1] // 2, frame.shape[0] // 2),
+            #         Image.Resampling.BOX) for frame in mjc_frames
+            # ]
+            mjc_frames = [np.array(frame)[::2, ::2] for frame in mjc_frames]
+            imageio.mimsave(filepath + "mjc_%d.gif" % target_index, mjc_frames, fps=1/world_dt,
+                            loop=0, subrectangles=True, palettesize=8, optimize=True)
             target_index += 1
                     
         env.close()

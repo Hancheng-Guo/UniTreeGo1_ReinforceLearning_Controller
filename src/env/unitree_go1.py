@@ -26,13 +26,6 @@ class UniTreeGo1Env(AntEnv):
         plt_clr = not (demo_type == "multiple")
         self.plt_render, self.plt_endline = init_plt_render(plt_clr) if self.render_mode == "human" else (noop, noop)
         self.plt_timer = time.time()
-        if self.render_mode == "human":
-            self.render()
-            camera_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, "tracking")
-            self.mujoco_renderer.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
-            self.mujoco_renderer.viewer.cam.fixedcamid = camera_id
-            self.camera_id = camera_id
-            self.mujoco_renderer.camera_id = camera_id
 
     @property
     def healthy_info(self):
@@ -87,6 +80,17 @@ class UniTreeGo1Env(AntEnv):
         forward_info = self.forward_info
         x_velocity = forward_info["x_velocity"]
         return x_velocity * self._forward_reward_weight
+    
+    def reset(self, *, seed=None, options=None):
+        ob, info = super().reset(seed=seed, options=options)
+        if self.render_mode == "human":
+            # self.render() # Has been called in the parent class
+            camera_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, "tracking")
+            self.mujoco_renderer.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
+            self.mujoco_renderer.viewer.cam.fixedcamid = camera_id
+            self.camera_id = camera_id
+            self.mujoco_renderer.camera_id = camera_id
+        return ob, info
     
     def render(self, render_mode=None):
         if render_mode:

@@ -18,8 +18,11 @@ demo:
   healthy_z_max: 0.75
   healthy_pitch_min: -0.524
   healthy_pitch_max: 0.524
-  camera_pos: "0 -4 3.2"
+  camera_pos: "0 -3.2 3"
   camera_xyaxes: "1 0 0 0 1 1"
+  mjc_render_width: 480
+  mjc_render_height: 480
+  plt_x_range: 200
 
 algorithm:
   policy: "MlpPolicy"
@@ -48,4 +51,4 @@ is:
   param_shared: True
   model_body_part_visiable: False
   model_state_def_visiable: True
-  model_camera_modified: True
+  model_camera_modified: False
