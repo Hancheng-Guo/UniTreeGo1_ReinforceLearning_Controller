@@ -9,7 +9,7 @@ from stable_baselines3 import PPO
 from datetime import datetime
 from PIL import Image
 
-from src.config.config import CONFIG, update_CONFIG, save_CONFIG
+from src.config.config import CONFIG, update_CONFIG, save_CONFIG, get_CONFIG
 from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
@@ -17,7 +17,8 @@ from src.env.callbacks import RenderCallback
 from src.utils.get_next_filename import get_next_filename
 from src.utils.update_checkpoints_tree import update_checkpoints_tree
 
-def ppo_train(base_model_name=None, demo=False):
+
+def ppo_train(base_model_name=None, config_inheritance=True, demo=False):
 
     note = input("\nPlease enter the notes for the current training model:\n > ")
     tensorboard_thread = ThreadTensorBoard()
@@ -25,22 +26,22 @@ def ppo_train(base_model_name=None, demo=False):
 
     model_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     train_env = make_env("train")
-    if base_model_name:
+    if base_model_name and config_inheritance:
         update_CONFIG(CONFIG["path"]["config_backup"] + base_model_name + ".yaml")
+    optional_kwargs = get_CONFIG(field="algorithm",
+                                 try_keys=["n_steps", "batch_size", "n_epochs",
+                                           "learning_rate", "gamma", "gae_lambda",
+                                           "device", "verbose",
+                                           ])
+    if base_model_name:
         model = PPO.load(CONFIG["path"]["checkpoints"] + base_model_name + ".zip",
-                         env=train_env,)
+                         env=train_env,
+                         **optional_kwargs)
     else:
         model = PPO(policy=CONFIG["algorithm"]["policy"],
                     env=train_env,
-                    n_steps=CONFIG["algorithm"]["n_steps"],
-                    batch_size=CONFIG["algorithm"]["batch_size"],
-                    n_epochs=CONFIG["algorithm"]["n_epochs"],
-                    gamma=CONFIG["algorithm"]["gamma"],
-                    gae_lambda=CONFIG["algorithm"]["gae_lambda"],
-                    device=CONFIG["algorithm"]["device"],
-                    verbose=CONFIG["algorithm"]["verbose"],
                     tensorboard_log=CONFIG["path"]["tensorboard"],
-                    )
+                    **optional_kwargs)
     display_model(train_env)
     
     if demo:
