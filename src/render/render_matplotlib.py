@@ -3,7 +3,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
-
+from src.config.config import CONFIG
 
 def init_plt_render(plt_clr=False):
     fig = None
@@ -27,16 +27,25 @@ def init_plt_render(plt_clr=False):
             "reward_total": {"value": info["reward_total"], "needs_unwrap": False},
             }
         return selected_kwargs
+    
+    def plt_update_lim(ax):
+        ax.relim()
+        ax.set_xlim(max(ax.dataLim.x0, ax.dataLim.x1 - CONFIG["demo"]["plt_x_range"]),
+                    max(ax.dataLim.x0 + CONFIG["demo"]["plt_x_range"], ax.dataLim.x1))
+        if ax.dataLim.y1 - ax.dataLim.y0 < 0.5:
+            y_padding = (0.5 - (ax.dataLim.y1 - ax.dataLim.y0)) / 2
+        else:
+            y_padding = 0
+        ax.set_ylim(ax.dataLim.y0 - y_padding, ax.dataLim.y1 + y_padding)
 
     def plt_newfig(selected_kwargs):
         nonlocal fig, plt_data, plt_axes, plt_n_line, plt_line, plt_max_col
         cols = min(plt_max_col, len(selected_kwargs))
         rows = math.ceil(len(selected_kwargs) / cols)
-        fig, plt_axes = plt.subplots(rows, cols, figsize=(2*cols, 2*rows)) # default figsize=(6.4, 4.8)
+        fig, plt_axes = plt.subplots(rows, cols, figsize=(1.8*cols, 1.8*rows)) # default figsize=(6.4, 4.8)
         plt_axes = plt_axes.flatten()
         for i, (key, _) in enumerate(selected_kwargs.items()):
-            plt_axes[i].relim()
-            plt_axes[i].autoscale_view()
+            # plt_update_lim(plt_axes[i])
             plt_axes[i].set_title(key)
 
     def plt_newline(selected_kwargs):
@@ -44,6 +53,7 @@ def init_plt_render(plt_clr=False):
         for i, (key, _) in enumerate(selected_kwargs.items()):
             plt_data[key] = list()
             line, = plt_axes[i].plot([], []) 
+            # plt_update_lim(plt_axes[i])
             plt_line[0].append(line)
 
     def plt_plot(selected_kwargs):
@@ -52,8 +62,7 @@ def init_plt_render(plt_clr=False):
             plt_data[key].append(value["value"])
             line_data = np.unwrap(plt_data[key]) if value["needs_unwrap"] else plt_data[key]
             plt_line[0][i].set_data(range(len(line_data)), line_data) 
-            plt_axes[i].relim()
-            plt_axes[i].autoscale_view()
+            plt_update_lim(plt_axes[i])
         plt.tight_layout()
         plt.pause(0.00001)
 
