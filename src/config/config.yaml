@@ -29,12 +29,12 @@ algorithm:
   n_steps: 128
   batch_size: 64
   n_epochs: 10
-  learning_rate: 5.e-5
+  learning_rate: 2.e-5
   gamma: 0.99
   gae_lambda: 0.95
   device: "cpu"
   verbose: 1
-  total_timesteps: 100000
+  total_timesteps: 1000000
 
 path:
   demo: "./output/demos/"

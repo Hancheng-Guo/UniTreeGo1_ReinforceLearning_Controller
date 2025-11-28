@@ -134,6 +134,7 @@ class UniTreeGo1Env(AntEnv):
         costs = ctrl_cost + contact_cost
 
         reward = rewards - costs
+        reward = reward / 10
 
         reward_info = {
             "reward_forward": forward_reward,
