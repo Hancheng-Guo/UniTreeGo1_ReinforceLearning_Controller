@@ -3,12 +3,18 @@ import copy
 import time
 import matplotlib.pyplot as plt
 import numpy as np
+from src.config.config import CONFIG
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 from src.render.render_matplotlib import init_plt_render
 
 
 def noop(*args, **kwargs):
     pass
+
+def radial_decay(x, radius=1, radius_value=0.05):
+    yaw_reward_alpha = -np.log(radius_value) / np.square(radius)
+    decayed_value = np.exp(-yaw_reward_alpha * np.square(x))
+    return decayed_value
 
 
 class UniTreeGo1Env(AntEnv):
@@ -44,10 +50,7 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def healthy_reward(self):
-        yaw = self.healthy_info["yaw"]
-        yaw_reward_min = 0.05
-        yaw_reward_alpha = -np.log(yaw_reward_min) / np.square(np.pi)
-        yaw_reward = np.exp(-yaw_reward_alpha * np.square(yaw))
+        yaw_reward = radial_decay(self.healthy_info["yaw"], radius=np.pi)
         return yaw_reward * self.healthy_reward_weight
     
     @property
@@ -79,7 +82,46 @@ class UniTreeGo1Env(AntEnv):
     def forward_reward(self):
         forward_info = self.forward_info
         x_velocity = forward_info["x_velocity"]
-        return x_velocity * self._forward_reward_weight
+        airborne_decay = self.contact_info["airborne_decay"]
+        return x_velocity * self._forward_reward_weight * airborne_decay
+        # return x_velocity * self._forward_reward_weight
+    
+    @property
+    def contact_info(self):
+        contact_forces = self.contact_forces
+        total_mass = self.model.body_mass.sum()
+        force_scale = total_mass * np.linalg.norm(self.model.opt.gravity)
+        norm_contact_forces = contact_forces / force_scale
+        min_value, max_value = self._contact_force_range
+        clip_contact_forces = np.clip(norm_contact_forces, min_value, max_value)   
+        clip_contact_forces_squared_sum = np.sum(np.square(clip_contact_forces))
+
+        foot_names = ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
+        foot_fz = []
+        for foot_name in foot_names:
+            foot_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, foot_name)
+            foot_fz.append(contact_forces[foot_id][2])
+        if "airborne_timee" not in self.__dict__:
+            self.airborne_time = 0
+        self.airborne_time = 0 if max(foot_fz) > 1 else self.airborne_time + 1
+        airborne_decay = np.exp(-CONFIG["train"]["airborne_lambda"] * self.airborne_time)
+
+        contact_info = {
+            "foot_fz": foot_fz,
+            "airborne_decay": airborne_decay,
+            "clip_contact_forces_squared_sum": clip_contact_forces_squared_sum,
+        }
+        return contact_info
+    
+    @property
+    def contact_forces(self):
+        raw_contact_forces = self.data.cfrc_ext     
+        return raw_contact_forces
+    
+    @property
+    def contact_cost(self):
+        contact_info = self.contact_info
+        return self._contact_cost_weight * contact_info["clip_contact_forces_squared_sum"]
     
     def reset(self, *, seed=None, options=None):
         ob, info = super().reset(seed=seed, options=options)
@@ -144,6 +186,7 @@ class UniTreeGo1Env(AntEnv):
             "reward_total": reward,
             **self.forward_info,
             **self.healthy_info,
+            **self.contact_info,
         }
 
         return reward, reward_info
