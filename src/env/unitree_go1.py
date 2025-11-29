@@ -11,9 +11,9 @@ from src.render.render_matplotlib import init_plt_render
 def noop(*args, **kwargs):
     pass
 
-def radial_decay(x, radius=1, radius_value=0.05):
-    yaw_reward_alpha = -np.log(radius_value) / np.square(radius)
-    decayed_value = np.exp(-yaw_reward_alpha * np.square(x))
+def radial_decay(x, radius=1, radius_value=0.01):
+    reward_alpha = -np.log(radius_value) / np.square(radius)
+    decayed_value = np.exp(-reward_alpha * np.square(x))
     return decayed_value
 
 
