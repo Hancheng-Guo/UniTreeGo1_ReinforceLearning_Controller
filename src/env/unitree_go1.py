@@ -50,8 +50,24 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def healthy_reward(self):
+        pitch_radius = (CONFIG["train"]["healthy_pitch_max"] - CONFIG["train"]["healthy_pitch_min"]) / 2
+        pitch_reward = radial_decay(self.healthy_info["pitch"], radius=pitch_radius)
         yaw_reward = radial_decay(self.healthy_info["yaw"], radius=np.pi)
-        return yaw_reward * self.healthy_reward_weight
+
+        hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
+        hip_joints_decays = []
+        for hip_joint in hip_joints:
+            hip_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, hip_joint)
+            hip_joint_addr = self.model.jnt_qposadr[hip_joint_id]
+            hip_joints_pos = float(self.data.qpos[hip_joint_addr])
+            hip_joints_min, hip_joints_max = self.model.jnt_range[hip_joint_id]
+            hip_joints_decays.append(
+                radial_decay(hip_joints_pos,
+                             radius=(hip_joints_max - hip_joints_min) / 2, 
+                             radius_value=0.5))
+        hip_joints_decay = sum(hip_joints_decays) / len(hip_joints_decays)
+
+        return yaw_reward * pitch_reward * self.healthy_reward_weight * hip_joints_decay
     
     @property
     def is_alive(self):
@@ -101,9 +117,10 @@ class UniTreeGo1Env(AntEnv):
         for foot_name in foot_names:
             foot_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, foot_name)
             foot_fz.append(contact_forces[foot_id][2])
-        if "airborne_timee" not in self.__dict__:
+        foot_fz_sorted = sorted(foot_fz, reverse=True)
+        if "airborne_time" not in self.__dict__:
             self.airborne_time = 0
-        self.airborne_time = 0 if max(foot_fz) > 1 else self.airborne_time + 1
+        self.airborne_time = 0 if foot_fz_sorted[1] > 1 else self.airborne_time + 1
         airborne_decay = np.exp(-CONFIG["train"]["airborne_lambda"] * self.airborne_time)
 
         contact_info = {
