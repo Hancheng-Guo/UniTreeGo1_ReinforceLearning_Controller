@@ -7,7 +7,6 @@ from src.config.config import CONFIG
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 from src.render.render_matplotlib import init_plt_render
 from src.config.config import CONFIG
-from src.utils.noop import noop
 from src.utils.decays import radial_decay
 
 
@@ -23,9 +22,9 @@ class UniTreeGo1Env(AntEnv):
         self.healthy_reward_weight = healthy_reward_weight
         self._healthy_pitch_range = healthy_pitch_range
         self.demo_type = demo_type
-        plt_clr = not (demo_type == "multiple")
-        self.plt_render, self.plt_endline = init_plt_render(plt_clr) if self.render_mode == "human" else (noop, noop)
-        self.plt_timer = time.time()
+        self.plt_render, self.plt_endline = init_plt_render(self)
+
+# region >>> Healthy and Alive Reward
 
     @property
     def healthy_info(self):
@@ -75,6 +74,10 @@ class UniTreeGo1Env(AntEnv):
     def alive_reward(self):
         return self.is_alive * self.healthy_reward
     
+# endregion
+
+# region >>> Forward Reward
+    
     @property
     def forward_info(self):
         xy_position_before = self.data_old.body(self._main_body).xpos[:2].copy()
@@ -96,6 +99,10 @@ class UniTreeGo1Env(AntEnv):
         return x_velocity * self._forward_reward_weight * airborne_decay
         # return x_velocity * self._forward_reward_weight
     
+# endregion
+
+# region >>> Contact Reward
+
     @property
     def contact_info(self):
         contact_forces = self.contact_forces
@@ -137,6 +144,8 @@ class UniTreeGo1Env(AntEnv):
         contact_info = self.contact_info
         return self._contact_cost_weight * contact_info["clip_contact_forces_squared_sum"]
     
+# endregion
+
     def reset(self, *, seed=None, options=None):
         options = options or {}
         options["init_key"] = CONFIG["algorithm"]["reset_state"]
@@ -168,10 +177,6 @@ class UniTreeGo1Env(AntEnv):
             "distance_from_origin": np.linalg.norm(self.data.qpos[0:2], ord=2),
             **reward_info,
         }
-        
-        if time.time() - self.plt_timer > 1:
-            plt.pause(0.00001)
-            self.plt_timer = time.time()
 
         if self.render_mode == "human":
             self.render()
