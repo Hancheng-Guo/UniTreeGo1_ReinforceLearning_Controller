@@ -1,6 +1,7 @@
 train:
   n_envs: 4
   forward_reward_weight: 1.
+  airborne_lambda: 0.2
   ctrl_cost_weight: 0.05
   contact_cost_weight: 5.e-4
   healthy_reward_weight: 1.
@@ -27,6 +28,7 @@ demo:
 algorithm:
   policy: "MlpPolicy"
   reset_state: "home"
+  n_steps: 256
   batch_size: 64
   n_epochs: 10
   learning_rate: 5.e-5
@@ -35,7 +37,7 @@ algorithm:
   gae_lambda: 0.95
   device: "cpu"
   verbose: 1
-  total_timesteps: 100000
+  total_timesteps: 200000
 
 path:
   demo: "./output/demos/"
@@ -50,6 +52,6 @@ path:
 
 is:
   param_shared: True
-  model_body_part_visiable: False
-  model_state_def_visiable: True
+  model_body_part_visiable: True
+  model_state_def_visiable: False
   model_camera_modified: False
