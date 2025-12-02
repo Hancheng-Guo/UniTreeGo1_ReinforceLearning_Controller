@@ -26,10 +26,11 @@ demo:
 
 algorithm:
   policy: "MlpPolicy"
-  n_steps: 128
+  reset_state: "home"
   batch_size: 64
   n_epochs: 10
   learning_rate: 5.e-5
+  vf_coef: 0.5
   gamma: 0.99
   gae_lambda: 0.95
   device: "cpu"
