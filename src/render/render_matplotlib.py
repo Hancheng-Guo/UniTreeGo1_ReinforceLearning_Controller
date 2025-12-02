@@ -25,6 +25,9 @@ def init_plt_render(plt_clr=False):
             "reward_forward": {"value": info["reward_forward"], "needs_unwrap": False},
             "costs": {"value": info["reward_ctrl"] + info["reward_contact"], "needs_unwrap": False},
             "reward_total": {"value": info["reward_total"], "needs_unwrap": False},
+            "foot_fz_max": {"value": max(info["foot_fz"]), "needs_unwrap": False},
+            "foot_fz_mean": {"value": sum(info["foot_fz"]) / len(info["foot_fz"]), "needs_unwrap": False},
+            "ori_contact_cost": {"value": info["clip_contact_forces_squared_sum"], "needs_unwrap": False},
             }
         return selected_kwargs
     
