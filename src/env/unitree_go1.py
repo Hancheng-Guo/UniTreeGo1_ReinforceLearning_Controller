@@ -117,10 +117,13 @@ class UniTreeGo1Env(AntEnv):
         for foot_name in foot_names:
             foot_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, foot_name)
             foot_fz.append(contact_forces[foot_id][2])
-        foot_fz_sorted = sorted(foot_fz, reverse=True)
         if "airborne_time" not in self.__dict__:
             self.airborne_time = 0
-        self.airborne_time = 0 if foot_fz_sorted[1] > 1 else self.airborne_time + 1
+        # foot_fz_sorted = sorted(foot_fz, reverse=True)
+        # self.airborne_time = 0 if foot_fz_sorted[1] > 1 else self.airborne_time + 1
+        landed_case1 = (foot_fz[0] > 1) and (foot_fz[3] > 1)
+        landed_case2 = (foot_fz[1] > 1) and (foot_fz[2] > 1)
+        self.airborne_time = 0 if (landed_case1 or landed_case2) else (self.airborne_time + 1)
         airborne_decay = np.exp(-CONFIG["train"]["airborne_lambda"] * self.airborne_time)
 
         contact_info = {
