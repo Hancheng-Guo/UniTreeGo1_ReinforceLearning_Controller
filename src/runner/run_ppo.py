@@ -13,7 +13,7 @@ from src.config.config import CONFIG, update_CONFIG, save_CONFIG, get_CONFIG
 from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
-from src.env.callbacks import RenderCallback
+from src.render.render_callbacks import RenderCallback
 from src.utils.get_next_filename import get_next_filename
 from src.utils.update_checkpoints_tree import update_checkpoints_tree
 
