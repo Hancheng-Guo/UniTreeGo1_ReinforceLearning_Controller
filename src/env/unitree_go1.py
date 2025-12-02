@@ -6,6 +6,7 @@ import numpy as np
 from src.config.config import CONFIG
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 from src.render.render_matplotlib import init_plt_render
+from src.config.config import CONFIG
 
 
 def noop(*args, **kwargs):
@@ -144,6 +145,8 @@ class UniTreeGo1Env(AntEnv):
         return self._contact_cost_weight * contact_info["clip_contact_forces_squared_sum"]
     
     def reset(self, *, seed=None, options=None):
+        options = options or {}
+        options["init_key"] = CONFIG["algorithm"]["reset_state"]
         ob, info = super().reset(seed=seed, options=options)
         if self.render_mode == "human":
             # self.render() # Has been called in the parent class
