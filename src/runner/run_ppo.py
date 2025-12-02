@@ -18,9 +18,12 @@ from src.utils.get_next_filename import get_next_filename
 from src.utils.update_checkpoints_tree import update_checkpoints_tree
 
 
-def ppo_train(base_model_name=None, config_inheritance=True, demo=False):
+def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_skip=False):
 
-    note = input("\nPlease enter the notes for the current training model:\n > ")
+    if note_skip:
+        note = ""
+    else:
+        note = input("\nPlease enter the notes for the current training model:\n > ")
     tensorboard_thread = ThreadTensorBoard()
     tensorboard_thread.run()
 
@@ -31,7 +34,7 @@ def ppo_train(base_model_name=None, config_inheritance=True, demo=False):
     optional_kwargs = get_CONFIG(field="algorithm",
                                  try_keys=["n_steps", "batch_size", "n_epochs",
                                            "learning_rate", "gamma", "gae_lambda",
-                                           "device", "verbose",
+                                           "device", "verbose", "vf_coef",
                                            ])
     if base_model_name:
         model = PPO.load(CONFIG["path"]["checkpoints"] + base_model_name + ".zip",
