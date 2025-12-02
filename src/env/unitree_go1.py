@@ -7,15 +7,8 @@ from src.config.config import CONFIG
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 from src.render.render_matplotlib import init_plt_render
 from src.config.config import CONFIG
-
-
-def noop(*args, **kwargs):
-    pass
-
-def radial_decay(x, radius=1, radius_value=0.01):
-    reward_alpha = -np.log(radius_value) / np.square(radius)
-    decayed_value = np.exp(-reward_alpha * np.square(x))
-    return decayed_value
+from src.utils.noop import noop
+from src.utils.decays import radial_decay
 
 
 class UniTreeGo1Env(AntEnv):
