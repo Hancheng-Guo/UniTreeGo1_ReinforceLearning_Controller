@@ -1,11 +1,20 @@
 import math
 import matplotlib
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
+from src.utils.noop import noop
 from src.config.config import CONFIG
 
-def init_plt_render(plt_clr=False):
+
+def init_plt_render(env):
+    plt_clr = False if env.demo_type == "multiple" else True
+    render_mode = env.render_mode
+    plt_render, plt_endline = _plt_render(plt_clr) if render_mode == "human" else (noop, noop)
+    return plt_render, plt_endline
+
+def _plt_render(plt_clr=False):
     fig = None
     plt_data = dict()
     plt_axes = None
@@ -48,7 +57,6 @@ def init_plt_render(plt_clr=False):
         fig, plt_axes = plt.subplots(rows, cols, figsize=(1.8*cols, 1.8*rows)) # default figsize=(6.4, 4.8)
         plt_axes = plt_axes.flatten()
         for i, (key, _) in enumerate(selected_kwargs.items()):
-            # plt_update_lim(plt_axes[i])
             plt_axes[i].set_title(key)
 
     def plt_newline(selected_kwargs):
@@ -56,8 +64,8 @@ def init_plt_render(plt_clr=False):
         for i, (key, _) in enumerate(selected_kwargs.items()):
             plt_data[key] = list()
             line, = plt_axes[i].plot([], []) 
-            # plt_update_lim(plt_axes[i])
             plt_line[0].append(line)
+        plt.pause(0.00001)
 
     def plt_plot(selected_kwargs):
         nonlocal fig, plt_data, plt_axes, plt_n_line, plt_line, plt_max_col
