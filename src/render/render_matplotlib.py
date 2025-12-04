@@ -20,23 +20,20 @@ def _plt_render(plt_clr=False):
     plt_axes = None
     plt_n_line = 1 if plt_clr else 5
     plt_line = [[] for _ in range(plt_n_line)]
-    plt_max_col = 3
+    plt_max_col = 4
     plt.ion()
 
     def plt_select_kwargs(state, info):
         selected_kwargs = {
             "x_velocity": {"value": info["x_velocity"], "needs_unwrap": False},
-            "y_velocity": {"value": info["y_velocity"], "needs_unwrap": False},
-            "z_position": {"value": state[2], "needs_unwrap": False},
-            "x_roll": {"value": info["roll"], "needs_unwrap": True},
+            # "y_velocity": {"value": info["y_velocity"], "needs_unwrap": False},
             "y_pitch": {"value": info["pitch"], "needs_unwrap": True},
-            "z_yaw": {"value": info["yaw"], "needs_unwrap": True},
+            "z_position": {"value": state[2], "needs_unwrap": False},
+            "state": {"value": info["state"], "needs_unwrap": False},
+            "reward": {"value": info["reward_total"], "needs_unwrap": False},
             "reward_forward": {"value": info["reward_forward"], "needs_unwrap": False},
-            "costs": {"value": info["reward_ctrl"] + info["reward_contact"], "needs_unwrap": False},
-            "reward_total": {"value": info["reward_total"], "needs_unwrap": False},
-            "foot_fz_max": {"value": max(info["foot_fz"]), "needs_unwrap": False},
-            "foot_fz_mean": {"value": sum(info["foot_fz"]) / len(info["foot_fz"]), "needs_unwrap": False},
-            "ori_contact_cost": {"value": info["clip_contact_forces_squared_sum"], "needs_unwrap": False},
+            "reward_posture": {"value": info["reward_posture"], "needs_unwrap": False},
+            "reward_state": {"value": info["reward_state"], "needs_unwrap": False},
             }
         return selected_kwargs
     

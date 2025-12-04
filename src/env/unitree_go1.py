@@ -3,76 +3,115 @@ import copy
 import time
 import matplotlib.pyplot as plt
 import numpy as np
-from src.config.config import CONFIG
+from enum import IntEnum
+from gymnasium.spaces import Box
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
-from src.render.render_matplotlib import init_plt_render
-from src.config.config import CONFIG
-from src.utils.decays import radial_decay
 
+from src.render.render_matplotlib import init_plt_render
+from src.render.render_mujoco import set_tracking_camera
+from src.utils.decays import radial_decay, clip_exp_decay
+from src.config.config import CONFIG
+
+
+foot_names = ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
+hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 
 class UniTreeGo1Env(AntEnv):
     def __init__(
             self,
             healthy_pitch_range: tuple[float, float] = (0.2, 1.0),
-            healthy_reward_weight: float = 1,
+            healthy_reward_weight: float = 1.,
+            posture_reward_weight: float = 1.,
+            state_reward_weight: float = 1.,
+            state_reward_alpha: float = 0.2,
             demo_type: str = "multiple",
             **kwargs):
-        super().__init__(
-            **kwargs)
-        self.healthy_reward_weight = healthy_reward_weight
-        self._healthy_pitch_range = healthy_pitch_range
+        super().__init__(**kwargs)
+        # for demo
         self.demo_type = demo_type
         self.plt_render, self.plt_endline = init_plt_render(self)
+        # for healthy_reward
+        self.healthy_reward_weight = healthy_reward_weight
+        self._healthy_pitch_range = healthy_pitch_range
+        self._hip_joint_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, hip_joint)
+                         for hip_joint in hip_joints]
+        self._hip_joint_addrs = [self.model.jnt_qposadr[hip_joint_id]
+                                 for hip_joint_id in self._hip_joint_ids]
+        # for posture_reward
+        self.posture_reward_weight = posture_reward_weight
+        # for state_reward
+        self.state_reward_weight = state_reward_weight
+        self.state_reward_alpha = state_reward_alpha
+        self.fsm = UniTreeGo1FSM()
+        # for contact_cost
+        self._total_mass = self.model.body_mass.sum()
+        self._contact_force_scale = self._total_mass * np.linalg.norm(self.model.opt.gravity)
+        # for adding foot_landed/airborne_time to obs
+        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, foot_name) 
+                          for foot_name in foot_names]
+        self._foot_landed_time = np.zeros(len(foot_names))
+        self._foot_airborne_time = np.zeros(len(foot_names))
+        obs_size = self.observation_space.shape[0] + 2 * len(foot_names)
+        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
+        self.observation_structure["foot_landed_time"] = len(self._foot_landed_time)
+        self.observation_structure["foot_airborne_time"] = len(self._foot_airborne_time)
 
-# region >>> Healthy and Alive Reward
+# region >>> Posture Reward
 
     @property
-    def healthy_info(self):
-        state = self.state_vector()
+    def posture_info(self):
         mat = np.zeros((9, 1))
-        mujoco.mju_quat2Mat(mat, state[3:7]) # Convert quaternion to 3D rotation matrix
-        yaw = np.arctan2(mat[3], mat[0])[0]
-        pitch = np.arcsin(-mat[6])[0]
-        roll = np.arctan2(mat[7], mat[8])[0]
-        healthy_info = {
-            "yaw": yaw,
-            "pitch": pitch,
-            "roll": roll,
+        mujoco.mju_quat2Mat(mat, self.state_vector()[3:7]) # Convert quaternion to 3D rotation matrix
+        posture_info = {
+            "yaw": np.arctan2(mat[3], mat[0])[0],
+            "pitch": np.arcsin(-mat[6])[0],
+            "roll": np.arctan2(mat[7], mat[8])[0],
         }
-        return healthy_info
+        return posture_info
     
     @property
-    def healthy_reward(self):
+    def posture_reward(self):
+
+        yaw_decay = radial_decay(self.posture_info["yaw"], radius=np.pi, radius_value=0.05)
+
         pitch_radius = (CONFIG["train"]["healthy_pitch_max"] - CONFIG["train"]["healthy_pitch_min"]) / 2
-        pitch_reward = radial_decay(self.healthy_info["pitch"], radius=pitch_radius)
-        yaw_reward = radial_decay(self.healthy_info["yaw"], radius=np.pi)
-
-        hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
-        hip_joints_decays = []
-        for hip_joint in hip_joints:
-            hip_joint_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, hip_joint)
-            hip_joint_addr = self.model.jnt_qposadr[hip_joint_id]
+        pitch_decay = radial_decay(self.posture_info["pitch"], radius=pitch_radius)
+        
+        hip_joints_decay = 0
+        for i, hip_joint_addr in enumerate(self._hip_joint_addrs):
             hip_joints_pos = float(self.data.qpos[hip_joint_addr])
-            hip_joints_min, hip_joints_max = self.model.jnt_range[hip_joint_id]
-            hip_joints_decays.append(
-                radial_decay(hip_joints_pos,
-                             radius=(hip_joints_max - hip_joints_min) / 2, 
-                             radius_value=0.5))
-        hip_joints_decay = sum(hip_joints_decays) / len(hip_joints_decays)
+            hip_joints_min, hip_joints_max = self.model.jnt_range[self._hip_joint_ids[i]]
+            hip_joints_radius = (hip_joints_max - hip_joints_min) / 2
+            hip_joints_decay += (
+                radial_decay(hip_joints_pos, radius=hip_joints_radius) /
+                len(self._hip_joint_addrs)
+                )
+        
+        z_min, z_max = self._healthy_z_range
+        z_radius = (z_max - z_min) / 2
+        z_decay = radial_decay(self.state_vector()[2], radius=z_radius)
 
-        return yaw_reward * pitch_reward * self.healthy_reward_weight * hip_joints_decay
+        return yaw_decay * pitch_decay * hip_joints_decay * z_decay * self.posture_reward_weight
+
+# endregion
+
+# region >>> Healthy Reward
     
     @property
     def is_alive(self):
         state = self.state_vector()
-        min_z, max_z = self._healthy_z_range
-        min_pitch, max_pitch = self._healthy_pitch_range
-        is_alive = np.isfinite(state).all() and min_z <= state[2] <= max_z and min_pitch <= self.healthy_info["pitch"] <= max_pitch
+        z_min, z_max = self._healthy_z_range
+        pitch_min, pitch_max = self._healthy_pitch_range
+        is_alive = (
+            np.isfinite(state).all()
+            and z_min <= state[2] <= z_max
+            and pitch_min <= self.posture_info["pitch"] <= pitch_max
+            )
         return is_alive
-
+    
     @property
-    def alive_reward(self):
-        return self.is_alive * self.healthy_reward
+    def healthy_reward(self):
+        return self.is_alive * self.healthy_reward_weight
     
 # endregion
 
@@ -95,41 +134,20 @@ class UniTreeGo1Env(AntEnv):
     def forward_reward(self):
         forward_info = self.forward_info
         x_velocity = forward_info["x_velocity"]
-        airborne_decay = self.contact_info["airborne_decay"]
-        return x_velocity * self._forward_reward_weight * airborne_decay
-        # return x_velocity * self._forward_reward_weight
+        return x_velocity * self._forward_reward_weight
     
 # endregion
 
-# region >>> Contact Reward
+# region >>> Contact Cost
 
     @property
     def contact_info(self):
-        contact_forces = self.contact_forces
-        total_mass = self.model.body_mass.sum()
-        force_scale = total_mass * np.linalg.norm(self.model.opt.gravity)
-        norm_contact_forces = contact_forces / force_scale
+        norm_contact_forces = self.contact_forces / self._contact_force_scale
         min_value, max_value = self._contact_force_range
         clip_contact_forces = np.clip(norm_contact_forces, min_value, max_value)   
         clip_contact_forces_squared_sum = np.sum(np.square(clip_contact_forces))
 
-        foot_names = ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
-        foot_fz = []
-        for foot_name in foot_names:
-            foot_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, foot_name)
-            foot_fz.append(contact_forces[foot_id][2])
-        if "airborne_time" not in self.__dict__:
-            self.airborne_time = 0
-        # foot_fz_sorted = sorted(foot_fz, reverse=True)
-        # self.airborne_time = 0 if foot_fz_sorted[1] > 1 else self.airborne_time + 1
-        landed_case1 = (foot_fz[0] > 1) and (foot_fz[3] > 1)
-        landed_case2 = (foot_fz[1] > 1) and (foot_fz[2] > 1)
-        self.airborne_time = 0 if (landed_case1 or landed_case2) else (self.airborne_time + 1)
-        airborne_decay = np.exp(-CONFIG["train"]["airborne_lambda"] * self.airborne_time)
-
         contact_info = {
-            "foot_fz": foot_fz,
-            "airborne_decay": airborne_decay,
             "clip_contact_forces_squared_sum": clip_contact_forces_squared_sum,
         }
         return contact_info
@@ -146,17 +164,48 @@ class UniTreeGo1Env(AntEnv):
     
 # endregion
 
+# region >>> State Reward
+
+    @property
+    def foot_obs(self):
+        for i, foot_id in enumerate(self._foot_ids):
+            foot_fz = self.contact_forces[foot_id][2]
+            if foot_fz > 1: # landed
+                self._foot_airborne_time[i] = 0
+                self._foot_landed_time[i] += 1
+            else:
+                self._foot_landed_time[i] = 0
+                self._foot_airborne_time[i] += 1
+        return self._foot_landed_time, self._foot_airborne_time
+    
+    @property
+    def state_info(self):
+        bonus, state_reward_time = self.fsm.update(self.foot_obs)
+        state_info = {
+            "state": self.fsm.state,
+            "bonus": bonus,
+            "state_reward_time": state_reward_time,
+        }
+        return state_info
+
+    @property
+    def state_reward(self):
+        state_info = self.state_info
+        bonus = state_info["bonus"]
+        _state_reward = clip_exp_decay(state_info["state_reward_time"],
+                                       alpha=self.state_reward_alpha)
+        return (bonus + _state_reward) * self.state_reward_weight
+
+
+# endregion
+
     def reset(self, *, seed=None, options=None):
         options = options or {}
         options["init_key"] = CONFIG["algorithm"]["reset_state"]
         ob, info = super().reset(seed=seed, options=options)
         if self.render_mode == "human":
             # self.render() # Has been called in the parent class
-            camera_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_CAMERA, "tracking")
-            self.mujoco_renderer.viewer.cam.type = mujoco.mjtCamera.mjCAMERA_FIXED
-            self.mujoco_renderer.viewer.cam.fixedcamid = camera_id
-            self.camera_id = camera_id
-            self.mujoco_renderer.camera_id = camera_id
+            set_tracking_camera(self)
         return ob, info
     
     def render(self, render_mode=None):
@@ -187,27 +236,258 @@ class UniTreeGo1Env(AntEnv):
         # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
         return observation, reward, terminated, False, info
     
+    def _get_obs(self):
+        obs = super()._get_obs()
+        landed_obs, airborne_obs = self.foot_obs
+        return np.concatenate((obs, landed_obs.flatten(), airborne_obs.flatten()))
+    
     def _get_rew(self, action):
         forward_reward = self.forward_reward
-        alive_reward = self.alive_reward
-        rewards = forward_reward + alive_reward
+        healthy_reward = self.healthy_reward
+        state_reward = self.state_reward
+        posture_reward = self.posture_reward
+        rewards = forward_reward + healthy_reward + state_reward + posture_reward
 
         ctrl_cost = self.control_cost(action)
         contact_cost = self.contact_cost
         costs = ctrl_cost + contact_cost
 
         reward = rewards - costs
-        reward = reward / 10
+        # reward = reward / 10
 
         reward_info = {
             "reward_forward": forward_reward,
+            "reward_healthy": healthy_reward,
+            "reward_state": state_reward,
+            "reward_posture": posture_reward,
             "reward_ctrl": -ctrl_cost,
             "reward_contact": -contact_cost,
-            "reward_alive": alive_reward,
             "reward_total": reward,
             **self.forward_info,
-            **self.healthy_info,
+            **self.posture_info,
             **self.contact_info,
+            **self.state_info,
         }
 
         return reward, reward_info
+
+# region >>> Finite State Machine
+
+class State(IntEnum):
+    s0 = 0  # init state
+    s1 = 1  # 
+    s2 = 2  # 
+    s3 = 3  # 
+    s4 = 4  # 
+    s5 = 5  # 
+    s6 = 6  # 
+    s7 = 7  # 
+    s8 = 8  # 
+    s9 = 9  # communal 4-legged stance
+    x0 = -1 # 0-legged stance
+    x1 = -2 # 1-legged stance
+    x2 = -3 # 2-legged stance (without diagonal support legs)
+
+
+class UniTreeGo1FSM:
+    def __init__(self):
+        self.state = State.s0
+        self._state_duration = 0
+        self.trans = {
+            State.s0: self.s0,
+            State.s1: self.s1,
+            State.s2: self.s2,
+            State.s3: self.s3,
+            State.s4: self.s4,
+            State.s5: self.s5,
+            State.s6: self.s6,
+            State.s7: self.s7,
+            State.s8: self.s8,
+            State.s9: self.s9,
+            State.x0: self.x0,
+            State.x1: self.x1,
+            State.x2: self.x2,
+        }
+
+    def check(self, obs):
+        # only return s2-s4, s6-s9, x0-x2
+        # s9 include s1 and s5
+        # x0 include s0
+        landed_obs, _ = obs # ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
+        landed_count = sum(1 for foot_landed_time in landed_obs if foot_landed_time > 0)
+        if landed_count == 0:
+            return State.x0
+        if landed_count == 1:
+            return State.x1
+        if landed_count == 4:
+            return State.s9
+        if landed_count == 3:
+            if landed_obs[0] == 0:
+                return State.s2
+            if landed_obs[1] == 0:
+                return State.s6
+            if landed_obs[2] == 0:
+                return State.s8
+            return State.s4 # landed_obs[3] == 0
+        # landed_count == 2
+        if (landed_obs[0] + landed_obs[1] == 0) or (landed_obs[2] + landed_obs[3] == 0) or (landed_obs[0] + landed_obs[2] == 0) or (landed_obs[1] + landed_obs[3] == 0):
+            return State.x2
+        if (landed_obs[0] + landed_obs[3] == 0):
+            return State.s3
+        return State.s7 # landed_obs[1] + landed_obs[2] == 0
+
+    def update(self, obs):
+        target_state = self.check(obs)
+        bonus, has_reward = self.trans[self.state](target_state)
+        reward_time = self._state_duration if has_reward else -1
+        return bonus, reward_time
+
+    def s0(self, target_state):
+        self.state = State.s0 if target_state == State.x0 else target_state
+        has_reward = False if self.state in {State.s0, State.x1, State.x2} else True
+        if self.state == State.s9:
+            bonus = 1
+        else:
+            bonus = 0
+        self._state_duration = self._state_duration + 1 if self.state == State.s0 else 0
+        return bonus, has_reward
+    
+    def s1(self, target_state):
+        self.state = State.s1 if target_state == State.s9 else target_state
+        has_reward = True if self.state in {State.s1, State.s2, State.s3} else False
+        if self.state == State.s1:
+            bonus = 0
+        elif self.state in {State.s2, State.s3}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s1 else 0
+        return bonus, has_reward
+    
+    def s2(self, target_state):
+        self.state = target_state
+        has_reward = True if self.state in {State.s2, State.s3, State.s4} else False
+        if self.state == State.s2:
+            bonus = 0
+        elif self.state in {State.s3, State.s4}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s2 else 0
+        return bonus, has_reward
+    
+    def s3(self, target_state):
+        self.state = State.s5 if target_state == State.s9 else target_state
+        has_reward = True if self.state in {State.s3, State.s4, State.s5} else False
+        if self.state == State.s3:
+            bonus = 0
+        elif self.state in {State.s4, State.s5}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s3 else 0
+        return bonus, has_reward
+    
+    def s4(self, target_state):
+        self.state = State.s5 if target_state == State.s9 else target_state
+        has_reward = True if self.state in {State.s4, State.s5, State.s6} else False
+        if self.state == State.s4:
+            bonus = 0
+        elif self.state in {State.s5, State.s6}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s4 else 0
+        return bonus, has_reward
+    
+    def s5(self, target_state):
+        self.state = State.s5 if target_state == State.s9 else target_state
+        has_reward = True if self.state in {State.s5, State.s6, State.s7} else False
+        if self.state == State.s5:
+            bonus = 0
+        elif self.state in {State.s6, State.s7}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s5 else 0
+        return bonus, has_reward
+    
+    def s6(self, target_state):
+        self.state = target_state
+        has_reward = True if self.state in {State.s6, State.s7, State.s8} else False
+        if self.state == State.s6:
+            bonus = 0
+        elif self.state in {State.s7, State.s8}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s6 else 0
+        return bonus, has_reward
+    
+    def s7(self, target_state):
+        self.state = State.s1 if target_state == State.s9 else target_state
+        has_reward = True if self.state in {State.s7, State.s8, State.s1} else False
+        if self.state == State.s7:
+            bonus = 0
+        elif self.state in {State.s8, State.s1}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s7 else 0
+        return bonus, has_reward
+    
+    def s8(self, target_state):
+        self.state = State.s1 if target_state == State.s9 else target_state
+        has_reward = True if self.state in {State.s8, State.s1, State.s2} else False
+        if self.state == State.s8:
+            bonus = 0
+        elif self.state in {State.s1, State.s2}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s8 else 0
+        return bonus, has_reward
+    
+    def s9(self, target_state):
+        self.state = target_state
+        has_reward = True if self.state in {State.s2, State.s3, State.s6, State.s7, State.s9} else False
+        if self.state == State.s9:
+            bonus = 0
+        elif self.state in {State.s2, State.s3, State.s6, State.s7}:
+            bonus = 1
+        else:
+            bonus = -1
+        self._state_duration = self._state_duration + 1 if self.state == State.s9 else 0
+        return bonus, has_reward
+    
+    def x0(self, target_state):
+        self.state = target_state
+        has_reward = False if self.state in {State.x0, State.x1, State.x2} else True
+        if self.state == State.s9:
+            bonus = 1
+        else:
+            bonus = 0
+        self._state_duration = self._state_duration + 1 if self.state == State.x0 else 0
+        return bonus, has_reward
+    
+    def x1(self, target_state):
+        self.state = target_state
+        has_reward = False if self.state in {State.x0, State.x1, State.x2} else True
+        if self.state == State.s9:
+            bonus = 1
+        else:
+            bonus = 0
+        self._state_duration = self._state_duration + 1 if self.state == State.x1 else 0
+        return bonus, has_reward
+    
+    def x2(self, target_state):
+        self.state = target_state
+        has_reward = False if self.state in {State.x0, State.x1, State.x2} else True
+        if self.state == State.s9:
+            bonus = 1
+        else:
+            bonus = 0
+        self._state_duration = self._state_duration + 1 if self.state == State.x2 else 0
+        return bonus, has_reward
+
+# endregion
