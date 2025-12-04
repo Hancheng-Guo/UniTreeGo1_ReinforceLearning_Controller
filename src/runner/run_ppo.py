@@ -33,8 +33,8 @@ def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_sk
         update_CONFIG(CONFIG["path"]["config_backup"] + base_model_name + ".yaml")
     optional_kwargs = get_CONFIG(field="algorithm",
                                  try_keys=["n_steps", "batch_size", "n_epochs",
-                                           "learning_rate", "gamma", "gae_lambda",
-                                           "device", "verbose", "vf_coef",
+                                           "learning_rate", "clip_range", "gamma", 
+                                           "gae_lambda", "device", "verbose", "vf_coef",
                                            ])
     if base_model_name:
         model = PPO.load(CONFIG["path"]["checkpoints"] + base_model_name + ".zip",
@@ -48,7 +48,7 @@ def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_sk
     display_model(train_env)
     
     if demo:
-        demo_env  = make_env("demo", demo_type="multiple")
+        demo_env = make_env("demo", demo_type="multiple")
         model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                     tb_log_name=model_name,
                     callback=RenderCallback(demo_env),
