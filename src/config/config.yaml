@@ -1,17 +1,19 @@
 train:
   n_envs: 4
-  forward_reward_weight: 1.
-  airborne_lambda: 0.2
   ctrl_cost_weight: 0.05
   contact_cost_weight: 5.e-4
+  forward_reward_weight: 1.
   healthy_reward_weight: 1.
+  posture_reward_weight: 1.
+  state_reward_weight: 1.
+  state_reward_alpha: 0.2
   reset_noise_scale: 0.1
   frame_skip: 5
   max_episode_steps: 1000
   healthy_z_min: 0.195
   healthy_z_max: 0.75
-  healthy_pitch_min: -0.524
-  healthy_pitch_max: 0.524
+  healthy_pitch_min: -0.785
+  healthy_pitch_max: 0.785
 
 demo:
   log_freq: 512
@@ -28,10 +30,11 @@ demo:
 algorithm:
   policy: "MlpPolicy"
   reset_state: "home"
-  n_steps: 256
+  n_steps: 128
   batch_size: 64
   n_epochs: 10
-  learning_rate: 5.e-5
+  learning_rate: 1.e-4
+  clip_range: 0.3
   vf_coef: 0.5
   gamma: 0.99
   gae_lambda: 0.95

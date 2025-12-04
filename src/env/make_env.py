@@ -4,10 +4,15 @@ import shutil
 import gymnasium as gym
 import xml.etree.ElementTree as ET
 from stable_baselines3.common.env_util import make_vec_env
+from gymnasium.envs.registration import register
 
-import src.env.init_env
 from src.config.config import CONFIG
 
+
+register(
+    id="MyUniTreeGo1",
+    entry_point="src.env.unitree_go1:UniTreeGo1Env",
+)
 
 def modify_model_camera():
 
@@ -47,10 +52,12 @@ def make_gym_env(env_mode="train", *args, **kwargs):
     kwargs["exclude_current_positions_from_observation"] = False
 
     kwargs["xml_file"] = CONFIG["path"]["model_dir_modified"] + "scene.xml"
-    kwargs["forward_reward_weight"] = CONFIG["train"]["forward_reward_weight"]
     kwargs["ctrl_cost_weight"] = CONFIG["train"]["ctrl_cost_weight"]
     kwargs["contact_cost_weight"] = CONFIG["train"]["contact_cost_weight"]
+    kwargs["forward_reward_weight"] = CONFIG["train"]["forward_reward_weight"]
     kwargs["healthy_reward_weight"] = CONFIG["train"]["healthy_reward_weight"]
+    kwargs["state_reward_weight"] = CONFIG["train"]["state_reward_weight"]
+    kwargs["posture_reward_weight"] = CONFIG["train"]["posture_reward_weight"]
     kwargs["frame_skip"] = CONFIG["train"]["frame_skip"]
     
     kwargs["healthy_z_range"] = (CONFIG[env_mode]["healthy_z_min"], CONFIG[env_mode]["healthy_z_max"])
