@@ -85,7 +85,7 @@ def make_env(mode, *args, **kwargs):
     if mode == "train":
         return make_vec_env(make_train_env, n_envs=CONFIG["train"]["n_envs"], *args, **kwargs)
     elif mode == "demo":
-        return make_demo_env(*args, **kwargs)
+        return make_vec_env(make_demo_env, n_envs=1, *args, **kwargs)
     else:
         print("make env error!")
         return

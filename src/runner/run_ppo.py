@@ -6,6 +6,7 @@ import shutil
 import matplotlib.pyplot as plt
 import numpy as np
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import VecNormalize
 from datetime import datetime
 from PIL import Image
 
@@ -13,7 +14,7 @@ from src.config.config import CONFIG, update_CONFIG, save_CONFIG, get_CONFIG
 from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
-from src.render.render_callbacks import RenderCallback
+from src.env.callbacks import RenderCallback, AdaptiveLRCallback
 from src.utils.get_next_filename import get_next_filename
 from src.utils.update_checkpoints_tree import update_checkpoints_tree
 
@@ -38,9 +39,12 @@ def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_sk
                                            ])
     if base_model_name:
         model = PPO.load(CONFIG["path"]["checkpoints"] + base_model_name + ".zip",
-                         env=train_env,
+                         env=VecNormalize.load(
+                             CONFIG["path"]["checkpoints"] + base_model_name + ".pkl",
+                             train_env),
                          **optional_kwargs)
     else:
+        train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True)
         model = PPO(policy=CONFIG["algorithm"]["policy"],
                     env=train_env,
                     tensorboard_log=CONFIG["path"]["tensorboard"],
@@ -51,15 +55,18 @@ def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_sk
         demo_env = make_env("demo", demo_type="multiple")
         model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                     tb_log_name=model_name,
-                    callback=RenderCallback(demo_env),
+                    callback=[RenderCallback(demo_env),
+                              AdaptiveLRCallback(model)],
                     )
         demo_env.close()
     else:
         model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                     tb_log_name=model_name,
+                    callback=[AdaptiveLRCallback(model)],
                     )
     
     model.save(CONFIG["path"]["checkpoints"] + model_name + ".zip")
+    train_env.save(CONFIG["path"]["checkpoints"] + model_name + ".pkl")
     update_checkpoints_tree(child=model_name, parent=base_model_name, note=note)
     shutil.copy2(CONFIG["path"]["env_class_py"], CONFIG["path"]["env_backup"] + model_name + ".py")
     save_CONFIG(CONFIG["path"]["config_backup"] + model_name + ".yaml")
