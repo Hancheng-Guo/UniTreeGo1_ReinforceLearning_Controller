@@ -16,7 +16,6 @@ train:
   healthy_pitch_max: 0.785
 
 demo:
-  log_freq: 512
   healthy_z_min: 0.195
   healthy_z_max: 0.75
   healthy_pitch_min: -0.524

@@ -14,12 +14,12 @@ from src.config.config import CONFIG, update_CONFIG, save_CONFIG, get_CONFIG
 from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
-from src.env.callbacks import RenderCallback, AdaptiveLRCallback
+from src.env.callbacks import AdaptiveLRCallback
 from src.utils.get_next_filename import get_next_filename
 from src.utils.update_checkpoints_tree import update_checkpoints_tree
 
 
-def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_skip=False):
+def ppo_train(base_model_name=None, config_inheritance=True, note_skip=False):
 
     if note_skip:
         note = ""
@@ -28,7 +28,7 @@ def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_sk
     tensorboard_thread = ThreadTensorBoard()
     tensorboard_thread.run()
 
-    model_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    train_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     train_env = make_env("train")
     if base_model_name and config_inheritance:
         update_CONFIG(CONFIG["path"]["config_backup"] + base_model_name + ".yaml")
@@ -50,46 +50,42 @@ def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_sk
                     **optional_kwargs)
     display_model(train_env)
     
-    if demo:
-        demo_env = make_env("demo", demo_type="multiple")
-        
-        model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
-                    tb_log_name=model_name,
-                    callback=[RenderCallback(demo_env),
-                              AdaptiveLRCallback()],
-                    )
-        demo_env.close()
-    else:
-        model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
-                    tb_log_name=model_name,
-                    callback=[AdaptiveLRCallback()],
-                    )
+    model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
+                tb_log_name=train_time,
+                callback=[AdaptiveLRCallback(),
+                          ],
+                )
     
-    model.save(CONFIG["path"]["checkpoints"] + model_name + ".zip")
-    train_env.save(CONFIG["path"]["checkpoints"] + model_name + ".pkl")
-    update_checkpoints_tree(child=model_name, parent=base_model_name, note=note)
-    shutil.copy2(CONFIG["path"]["env_class_py"], CONFIG["path"]["env_backup"] + model_name + ".py")
-    save_CONFIG(CONFIG["path"]["config_backup"] + model_name + ".yaml")
+    model.save(CONFIG["path"]["checkpoints"] + train_time + ".zip")
+    train_env.save(CONFIG["path"]["checkpoints"] + train_time + ".pkl")
+    update_checkpoints_tree(child=train_time, parent=base_model_name, note=note)
+    shutil.copy2(CONFIG["path"]["env_class_py"], CONFIG["path"]["env_backup"] + train_time + ".py")
+    save_CONFIG(CONFIG["path"]["config_backup"] + train_time + ".yaml")
     
     tensorboard_thread.stop()
     train_env.close()
     plt.close('all')
 
-    print("\nModel %s traning accomplished!\n" % model_name)
-    return model_name
+    print("\nModel %s traning accomplished!\n" % train_time)
+    return train_time
 
 
 def ppo_test(model_name=None, n_tests=3, max_steps=1000):
 
     if model_name:
         env = make_env("demo", demo_type="single")
+        env = VecNormalize.load(CONFIG["path"]["checkpoints"] + model_name + ".pkl", env)
+        env.training = False
+        env.norm_reward = False
         model = PPO.load(CONFIG["path"]["checkpoints"] + model_name,
                          env=env,
                          device=CONFIG["algorithm"]["device"]
                          )
-        obs, info = env.reset()
+        obs = env.reset()
 
-        world_dt = env.env.env.env.dt * env.env.env.env.frame_skip
+        # world_dt = env.env.env.env.dt * env.env.env.env.frame_skip
+        my_env = env.venv.envs[0].env.env.env.env
+        world_dt = my_env.dt * my_env.frame_skip
         filepath = CONFIG["path"]["demo"] + model_name.split('.')[0] + "/"
         if not os.path.exists(filepath):
             os.makedirs(filepath)
@@ -103,8 +99,9 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
 
             for _ in range(max_steps):
                 action, _ = model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, info = env.step(action)
-                if terminated or truncated:
+                obs, reward, done, info = env.step(action)
+                # obs, reward, terminated, truncated = env.step(action)
+                if done:
                     break
 
                 plt_fig = plt.gcf()
@@ -114,11 +111,11 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
                 plt_img = Image.open(buffer)
                 plt_frames.append(plt_img)
                 
-                mjc_fig = env.env.env.env.render("rgb_array")
+                mjc_fig = my_env.render("rgb_array")
                 mjc_frames.append(mjc_fig)
 
-            env.env.env.env.plt_endline()
-            obs, info = env.reset()
+            my_env.plt_endline()
+            obs = env.reset()
             imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt,
                             loop=0, subrectangles=True, palettesize=4, optimize=True)
             mjc_frames = [np.array(frame)[::2, ::2] for frame in mjc_frames]
