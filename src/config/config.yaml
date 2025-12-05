@@ -33,7 +33,7 @@ algorithm:
   n_steps: 128
   batch_size: 64
   n_epochs: 10
-  learning_rate: 1.e-4
+  learning_rate_init: 5.e-4
   clip_range: 0.2
   vf_coef: 0.5
   gamma: 0.99
@@ -55,6 +55,6 @@ path:
 
 is:
   param_shared: True
-  model_body_part_visiable: True
+  model_body_part_visiable: False
   model_state_def_visiable: False
   model_camera_modified: False

@@ -4,6 +4,7 @@ import shutil
 import gymnasium as gym
 import xml.etree.ElementTree as ET
 from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv
 from gymnasium.envs.registration import register
 
 from src.config.config import CONFIG
@@ -85,7 +86,15 @@ def make_env(mode, *args, **kwargs):
     if mode == "train":
         return make_vec_env(make_train_env, n_envs=CONFIG["train"]["n_envs"], *args, **kwargs)
     elif mode == "demo":
-        return make_vec_env(make_demo_env, n_envs=1, *args, **kwargs)
+        # return make_vec_env(make_demo_env, n_envs=1, *args, **kwargs)
+
+        # env = make_demo_env(*args, **kwargs)
+        # return DummyVecEnv([env])
+
+        return make_demo_env(*args, **kwargs)
+
+        # return make_vec_env(lambda: make_demo_env(*args, **kwargs), n_envs=1)
+    
     else:
         print("make env error!")
         return

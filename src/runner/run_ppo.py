@@ -34,35 +34,35 @@ def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_sk
         update_CONFIG(CONFIG["path"]["config_backup"] + base_model_name + ".yaml")
     optional_kwargs = get_CONFIG(field="algorithm",
                                  try_keys=["n_steps", "batch_size", "n_epochs",
-                                           "learning_rate", "clip_range", "gamma", 
-                                           "gae_lambda", "device", "verbose", "vf_coef",
+                                           "clip_range", "gamma", "gae_lambda",
+                                           "device", "verbose", "vf_coef",
                                            ])
     if base_model_name:
-        model = PPO.load(CONFIG["path"]["checkpoints"] + base_model_name + ".zip",
-                         env=VecNormalize.load(
-                             CONFIG["path"]["checkpoints"] + base_model_name + ".pkl",
-                             train_env),
-                         **optional_kwargs)
+        base_checkpoint = CONFIG["path"]["checkpoints"] + base_model_name
+        train_env = VecNormalize.load(base_checkpoint + ".pkl", train_env)
+        model = PPO.load(base_checkpoint + ".zip", env=train_env, **optional_kwargs)
     else:
         train_env = VecNormalize(train_env, norm_obs=True, norm_reward=True)
         model = PPO(policy=CONFIG["algorithm"]["policy"],
                     env=train_env,
                     tensorboard_log=CONFIG["path"]["tensorboard"],
+                    learning_rate=CONFIG["algorithm"]["learning_rate_init"],
                     **optional_kwargs)
     display_model(train_env)
     
     if demo:
         demo_env = make_env("demo", demo_type="multiple")
+        
         model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                     tb_log_name=model_name,
                     callback=[RenderCallback(demo_env),
-                              AdaptiveLRCallback(model)],
+                              AdaptiveLRCallback()],
                     )
         demo_env.close()
     else:
         model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                     tb_log_name=model_name,
-                    callback=[AdaptiveLRCallback(model)],
+                    callback=[AdaptiveLRCallback()],
                     )
     
     model.save(CONFIG["path"]["checkpoints"] + model_name + ".zip")
@@ -121,11 +121,6 @@ def ppo_test(model_name=None, n_tests=3, max_steps=1000):
             obs, info = env.reset()
             imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt,
                             loop=0, subrectangles=True, palettesize=4, optimize=True)
-            # mjc_frames = [
-            #     Image.fromarray(frame).resize(
-            #         (frame.shape[1] // 2, frame.shape[0] // 2),
-            #         Image.Resampling.BOX) for frame in mjc_frames
-            # ]
             mjc_frames = [np.array(frame)[::2, ::2] for frame in mjc_frames]
             imageio.mimsave(filepath + "mjc_%d.gif" % target_index, mjc_frames, fps=1/world_dt,
                             loop=0, subrectangles=True, palettesize=8, optimize=True)
