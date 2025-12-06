@@ -32,7 +32,7 @@ demo:
 algorithm:
   policy: "MlpPolicy"
   reset_state: "home"
-  n_steps: 128
+  n_steps: 512
   batch_size: 64
   n_epochs: 10
   learning_rate_init: 5.e-4
@@ -42,7 +42,7 @@ algorithm:
   gae_lambda: 0.95
   device: "cpu"
   verbose: 1
-  total_timesteps: 10000
+  total_timesteps: 1000000
 
 path:
   output: ".\\output\\"

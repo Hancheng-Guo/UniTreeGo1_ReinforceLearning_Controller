@@ -133,3 +133,36 @@ class AdaptiveLRCallback(BaseCallback):
                     self.target_lr = max(current_lr / self.factor, self.lr_min)
                     self.smooth_step_left = self.smooth_step_len
         return True
+
+
+class ProgressCallback(BaseCallback):
+    def __init__(self, verbose=0):
+        super().__init__(verbose)
+        self.total_rollout_steps = None
+        self.current_step = 0
+        self.barlen = 50
+        self.diglen = None
+
+    def _on_training_start(self):
+        self.total_rollout_steps = self.model.n_steps * self.model.n_envs
+        self.diglen = len(f"{self.total_rollout_steps}")
+
+    def _on_rollout_start(self) -> None:
+        self.current_step = 0
+        return True
+
+    def _on_step(self) -> bool:
+        self.current_step += 1
+        frac = self.current_step * 4 / self.total_rollout_steps
+
+        a = "=" * int(frac * self.barlen)
+        b = "." * (self.barlen - int(frac * self.barlen))
+        c = f"{(self.current_step * 4):>{self.diglen}d}"
+        d = f"{self.total_rollout_steps:>{self.diglen}d}"
+        print(f" Rollout {(frac * 100):^3.0f}% [{a}>{b}] {c}/{d} steps", end="\r")
+
+        return True
+    
+    def _on_rollout_end(self) -> bool:
+        print("\033[2K\r", end="")
+        return True

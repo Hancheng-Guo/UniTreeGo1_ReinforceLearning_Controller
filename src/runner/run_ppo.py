@@ -13,7 +13,7 @@ from src.config.config import CONFIG, update_CONFIG, get_CONFIG
 from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
-from src.env.callbacks import CustomCheckpointCallback, AdaptiveLRCallback
+from src.env.callbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressCallback
 
 
 def check_base_name(base_name):
@@ -158,7 +158,8 @@ def ppo_train(base_name=None, config_inheritance=True, note_skip=False):
                                   **optional_kwargs)
     model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                 tb_log_name=f"log_{save_name}",
-                callback=[AdaptiveLRCallback(),
+                callback=[ProgressCallback(),
+                          AdaptiveLRCallback(),
                           CustomCheckpointCallback(save_name, save_dir,
                                                    base_name, note)],)
     

@@ -25,7 +25,7 @@ class UniTreeGo1Env(AntEnv):
             posture_reward_weight: float = 1.,
             state_reward_weight: float = 1.,
             state_reward_alpha: float = 0.2,
-            render_mode: str = "rgb_array",
+            render_mode: str = None,
             **kwargs):
         super().__init__(**kwargs)
         # for demo
