@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from src.config.config import CONFIG
 from anytree import Node, RenderTree, find
 
@@ -21,16 +22,23 @@ def to_dict(node):
 
 
 def to_txt(root):
-    md_path = CONFIG["path"]["checkpoints"] + "checkpoint_tree.txt"
+    md_path = f"{CONFIG["path"]["checkpoint_tree"]}.txt"
     with open(md_path, "w", encoding="utf-8") as f:
         for pre, fill, node in RenderTree(root):
-            marker = "" if os.path.isfile("%s%s.zip" % (CONFIG["path"]["checkpoints"], node.name)) else "*"
+            pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(\d+)$')
+            m = pattern.match(node.name)
+            if m:
+                zip_exist = os.path.isfile(os.path.join(CONFIG["path"]["output"], m.group(1), f"{node.name}.zip"))
+                pkl_exist = os.path.isfile(os.path.join(CONFIG["path"]["output"], m.group(1), f"{node.name}.pkl"))
+                marker = "" if (zip_exist and pkl_exist) else "*"
+            else:
+                marker = "*"
             print(f"{pre}{node.name}{marker}\t({node.note})", file=f)
         print("\n\n\nNote: Models marked with * have been deleted.", file=f)
 
 
 def update_checkpoints_tree(child, parent="root", note=""):
-    json_path = CONFIG["path"]["checkpoints"] + "checkpoint_tree.json"
+    json_path = f"{CONFIG["path"]["checkpoint_tree"]}.json"
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     root = from_dict(data)

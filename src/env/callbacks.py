@@ -1,51 +1,91 @@
+import os
+import shutil
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.utils import FloatSchedule, ConstantSchedule
-from src.render.render_tensorboard import init_log, update_log
-from src.config.config import CONFIG
+# from src.render.render_tensorboard import init_log, update_log
+from src.utils.update_checkpoints_tree import update_checkpoints_tree
+from src.config.config import CONFIG, save_CONFIG
 
 # self.locals.info has info of customize-env
 
-class RenderCallback(BaseCallback):
-    def __init__(self, demo_env,
-                 demo_freq=CONFIG["demo"]["log_freq"],
-                 verbose=CONFIG["algorithm"]["verbose"]):
+
+class CustomCheckpointCallback(BaseCallback):
+    def __init__(self,
+                 save_name: str,
+                 save_dir: str,
+                 base_name: str = None,
+                 note: str = "",
+                 save_freq: int = CONFIG["train"]["checkpoint_freq"],
+                 save_vecnormalize: bool = True,
+                 verbose: int = 2,
+                 ):
         super().__init__(verbose)
-        self.demo_env = demo_env
-        n_stpes_per_epoch = CONFIG["algorithm"]["n_steps"] * CONFIG["train"]["n_envs"]
-        self.demo_freq = n_stpes_per_epoch if (demo_freq <= n_stpes_per_epoch) else (demo_freq // n_stpes_per_epoch)
+        self.save_freq = save_freq
+        self.save_name = save_name
+        self.save_dir = save_dir
+        self.base_name = base_name
+        self.note = note
+        self.save_vecnormalize = save_vecnormalize
+        self.save_count = 1
+
+    @property
+    def _counted_save_name(self) -> str:
+        return f"{self.save_name}_{self.save_count}"
     
-    def _init_step_loop(self):
-        obs, info = self.demo_env.reset()
-        log_data = init_log()
+    @property
+    def _model_path(self) -> str:
+        return os.path.join(self.save_dir, f"mdl_{self._counted_save_name}.zip")
+    
+    @property
+    def _config_path(self) -> str:
+        return os.path.join(self.save_dir, f"cfg_{self._counted_save_name}.yaml")
+    
+    @property
+    def _env_path(self) -> str:
+        return os.path.join(self.save_dir, f"env_{self._counted_save_name}.pkl")
+    
+    @property
+    def _backup_path(self) -> str:
+        return os.path.join(self.save_dir, f"bkp_{self._counted_save_name}.py")
 
-        def _step_loop():
-            nonlocal obs, log_data
-            action, obs_predict = self.model.predict(obs, deterministic=True)
-            obs, reward, terminated, truncated, info = self.demo_env.step(action)
-            done = terminated or truncated
+    def save_checkpoint(self) -> bool:
+        lr_schedule_tmp = self.model.lr_schedule
+        self.model.lr_schedule = FloatSchedule(ConstantSchedule(self.model.lr_schedule(self.model._current_progress_remaining)))
+        # save model
+        self.model.save(self._model_path)
+        if self.verbose >= 2:
+            print(f"Saving model to {self._model_path}")
+        # save vecnormalized env
+        if self.save_vecnormalize and self.model.get_vec_normalize_env() is not None:
+            self.model.get_vec_normalize_env().save(self._env_path)
+            if self.verbose >= 2:
+                print(f"Saving vecnormalized env to {self._env_path}")
+        # update checkpoints tree
+        update_checkpoints_tree(child=self._counted_save_name, parent=self.base_name, note=self.note)
+        self.base_name = self._counted_save_name
+        # save config
+        save_CONFIG(self._config_path)
+        if self.verbose >= 2:
+            print(f"Saving config to {self._config_path}")
+        # save origin py.file of customize env
+        shutil.copy2(CONFIG["path"]["env_class_py"], self._backup_path)
+        if self.verbose >= 2:
+            print(f"Saving origin py.file of customize env to {self._backup_path}")
 
-            log_data = update_log(log_data, action, obs_predict, obs, reward, terminated, truncated, info)
-
-            # sleep(0.02)
-            return done
-        
-        def _step_done():
-            nonlocal log_data
-            for key, value in log_data.__dict__.items():
-                self.logger.record(CONFIG["path"]["tensorboard_log"] + key, value)
-            self.logger.dump(self.num_timesteps)
-
-        return _step_loop, _step_done
-
+        self.model.lr_schedule = lr_schedule_tmp
+        self.save_count += 1
+        return True
         
     def _on_step(self) -> bool:
-        print("current step: %d" % self.num_timesteps)
-        if self.num_timesteps % self.demo_freq == 0:
-            step_loop, step_done = self._init_step_loop()
-            while not step_loop(): pass
-            step_done()
+        if self.n_calls % self.save_freq == 0:
+            self.save_checkpoint()
+        return True
+
+    def _on_training_end(self) -> bool:
+        self.save_checkpoint()
         return True
     
+
 class AdaptiveLRCallback(BaseCallback):
     def __init__(self, smooth_step_len=2000,
                  kl_min=0.01, kl_max=0.25,
@@ -92,9 +132,4 @@ class AdaptiveLRCallback(BaseCallback):
                 elif kl > self.kl_max:
                     self.target_lr = max(current_lr / self.factor, self.lr_min)
                     self.smooth_step_left = self.smooth_step_len
-        return True
-    
-    def _on_training_end(self) -> bool:
-        self.model.lr_schedule = FloatSchedule(ConstantSchedule(self.current_lr))
-        self.model.learning_rate = self.current_lr
         return True

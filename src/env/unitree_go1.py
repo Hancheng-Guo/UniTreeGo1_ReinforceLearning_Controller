@@ -25,12 +25,14 @@ class UniTreeGo1Env(AntEnv):
             posture_reward_weight: float = 1.,
             state_reward_weight: float = 1.,
             state_reward_alpha: float = 0.2,
-            demo_type: str = "multiple",
+            render_mode: str = "rgb_array",
             **kwargs):
         super().__init__(**kwargs)
         # for demo
-        self.demo_type = demo_type
-        self.plt_render, self.plt_endline = init_plt_render(self)
+        self.render_mode = render_mode
+        self.plt_render, self.plt_endline = init_plt_render(self.render_mode)
+        self.mjc_img = None
+        self.plt_img = None
         # for healthy_reward
         self.healthy_reward_weight = healthy_reward_weight
         self._healthy_pitch_range = healthy_pitch_range
@@ -205,19 +207,18 @@ class UniTreeGo1Env(AntEnv):
 
 # endregion
 
-    def reset(self, *, seed=None, options=None):
-        options = options or {}
-        options["init_key"] = CONFIG["algorithm"]["reset_state"]
-        ob, info = super().reset(seed=seed, options=options)
-        if self.render_mode == "human":
-            # self.render() # Has been called in the parent class
-            set_tracking_camera(self)
-        return ob, info
-    
     def render(self, render_mode=None):
         if render_mode:
             return self.mujoco_renderer.render(render_mode)
         return self.mujoco_renderer.render(self.render_mode)
+    
+    def reset(self, *, seed=None, options=None):
+        options = options or {}
+        options["init_key"] = CONFIG["algorithm"]["reset_state"]
+        ob, info = super().reset(seed=seed, options=options)
+        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+            set_tracking_camera(self)
+        return ob, info
     
     def step(self, action):
         self.data_old =  copy.deepcopy(self.data)
@@ -233,9 +234,9 @@ class UniTreeGo1Env(AntEnv):
             **reward_info,
         }
 
-        if self.render_mode == "human":
-            self.render()
-            self.plt_render(self.state_vector(), info)
+        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+            self.mjc_img = self.render()
+            self.plt_img = self.plt_render(self.state_vector(), info)
             if terminated:
                 self.plt_endline()
 
@@ -259,8 +260,6 @@ class UniTreeGo1Env(AntEnv):
         costs = ctrl_cost + contact_cost
 
         reward = rewards - costs
-        # reward = reward / 10
-
         reward_info = {
             "reward_forward": forward_reward,
             "reward_healthy": healthy_reward,
