@@ -70,6 +70,7 @@ def load_model(env, base_name, base_dir, **kwargs):
     else:
         env = VecNormalize(env, norm_obs=True, norm_reward=True)
         model = PPO(policy=CONFIG["algorithm"]["policy"],
+                    learning_rate=CONFIG["algorithm"]["learning_rate_init"],
                     env=env,
                     **kwargs)
     display_model(env)
@@ -154,7 +155,6 @@ def ppo_train(base_name=None, config_inheritance=True, note_skip=False):
     train_env = make_env("train")
     model, train_env = load_model(train_env, base_name, base_dir,
                                   tensorboard_log=save_dir,
-                                  learning_rate=CONFIG["algorithm"]["learning_rate_init"],
                                   **optional_kwargs)
     model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                 tb_log_name=f"log_{save_name}",

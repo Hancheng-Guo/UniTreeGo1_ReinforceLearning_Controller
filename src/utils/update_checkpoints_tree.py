@@ -28,8 +28,8 @@ def to_txt(root):
             pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(\d+)$')
             m = pattern.match(node.name)
             if m:
-                zip_exist = os.path.isfile(os.path.join(CONFIG["path"]["output"], m.group(1), f"{node.name}.zip"))
-                pkl_exist = os.path.isfile(os.path.join(CONFIG["path"]["output"], m.group(1), f"{node.name}.pkl"))
+                zip_exist = os.path.isfile(os.path.join(CONFIG["path"]["output"], m.group(1), f"mdl_{node.name}.zip"))
+                pkl_exist = os.path.isfile(os.path.join(CONFIG["path"]["output"], m.group(1), f"env_{node.name}.pkl"))
                 marker = "" if (zip_exist and pkl_exist) else "*"
             else:
                 marker = "*"

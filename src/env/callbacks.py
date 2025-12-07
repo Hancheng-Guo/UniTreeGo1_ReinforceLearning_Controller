@@ -28,67 +28,60 @@ class CustomCheckpointCallback(BaseCallback):
         self.save_vecnormalize = save_vecnormalize
         self.save_count = 1
 
+    def _on_training_start(self):
+        self.save_freq = (-self.save_freq % self.model.n_envs) + self.save_freq
+
     @property
     def _counted_save_name(self) -> str:
         return f"{self.save_name}_{self.save_count}"
-    
-    @property
-    def _model_path(self) -> str:
-        return os.path.join(self.save_dir, f"mdl_{self._counted_save_name}.zip")
-    
-    @property
-    def _config_path(self) -> str:
-        return os.path.join(self.save_dir, f"cfg_{self._counted_save_name}.yaml")
-    
-    @property
-    def _env_path(self) -> str:
-        return os.path.join(self.save_dir, f"env_{self._counted_save_name}.pkl")
-    
-    @property
-    def _backup_path(self) -> str:
-        return os.path.join(self.save_dir, f"bkp_{self._counted_save_name}.py")
 
-    def save_checkpoint(self) -> bool:
+    def _save_checkpoint(self) -> bool:
         lr_schedule_tmp = self.model.lr_schedule
-        self.model.lr_schedule = FloatSchedule(ConstantSchedule(self.model.lr_schedule(self.model._current_progress_remaining)))
+        lr_tmp = self.model.lr_schedule(self.model._current_progress_remaining)
+        self.model.learning_rate = lr_tmp
+        self.model.lr_schedule = FloatSchedule(ConstantSchedule(lr_tmp))
         # save model
-        self.model.save(self._model_path)
+        model_path = os.path.join(self.save_dir, f"mdl_{self._counted_save_name}.zip")
+        self.model.save(model_path)
         if self.verbose >= 2:
-            print(f"Saving model to {self._model_path}")
+            print(f"Saving model to {model_path}")
         # save vecnormalized env
+        env_path = os.path.join(self.save_dir, f"env_{self._counted_save_name}.pkl")
         if self.save_vecnormalize and self.model.get_vec_normalize_env() is not None:
-            self.model.get_vec_normalize_env().save(self._env_path)
+            self.model.get_vec_normalize_env().save(env_path)
             if self.verbose >= 2:
-                print(f"Saving vecnormalized env to {self._env_path}")
+                print(f"Saving vecnormalized env to {env_path}")
         # update checkpoints tree
         update_checkpoints_tree(child=self._counted_save_name, parent=self.base_name, note=self.note)
         self.base_name = self._counted_save_name
         # save config
-        save_CONFIG(self._config_path)
+        config_path = os.path.join(self.save_dir, f"cfg_{self._counted_save_name}.yaml")
+        save_CONFIG(config_path)
         if self.verbose >= 2:
-            print(f"Saving config to {self._config_path}")
+            print(f"Saving config to {config_path}")
         # save origin py.file of customize env
-        shutil.copy2(CONFIG["path"]["env_class_py"], self._backup_path)
+        backup_path = os.path.join(self.save_dir, f"bkp_{self._counted_save_name}.py")
+        shutil.copy2(CONFIG["path"]["env_class_py"], backup_path)
         if self.verbose >= 2:
-            print(f"Saving origin py.file of customize env to {self._backup_path}")
+            print(f"Saving origin py.file of customize env to {backup_path}")
 
         self.model.lr_schedule = lr_schedule_tmp
         self.save_count += 1
         return True
         
     def _on_step(self) -> bool:
-        if self.n_calls % self.save_freq == 0:
-            self.save_checkpoint()
+        if (self.n_calls * self.model.n_envs) % self.save_freq == 0:
+            self._save_checkpoint()
         return True
 
     def _on_training_end(self) -> bool:
-        self.save_checkpoint()
+        self._save_checkpoint()
         return True
     
 
 class AdaptiveLRCallback(BaseCallback):
     def __init__(self, smooth_step_len=2000,
-                 kl_min=0.01, kl_max=0.25,
+                 kl_min=0.01, kl_max=0.1,
                  lr_min=1e-6, lr_max=5e-3,
                  factor=2, verbose=0):
         super().__init__(verbose)
@@ -139,9 +132,11 @@ class ProgressCallback(BaseCallback):
     def __init__(self, verbose=0):
         super().__init__(verbose)
         self.total_rollout_steps = None
-        self.current_step = 0
+        self.current_step = None
         self.barlen = 50
         self.diglen = None
+        self.splen = 3
+        self.sppos = None
 
     def _on_training_start(self):
         self.total_rollout_steps = self.model.n_steps * self.model.n_envs
@@ -149,17 +144,22 @@ class ProgressCallback(BaseCallback):
 
     def _on_rollout_start(self) -> None:
         self.current_step = 0
+        self.sppos = 0
         return True
 
     def _on_step(self) -> bool:
         self.current_step += 1
-        frac = self.current_step * 4 / self.total_rollout_steps
+        frac = self.current_step * self.model.n_envs / self.total_rollout_steps
+        a_len = int(frac * self.barlen)
 
-        a = "=" * int(frac * self.barlen)
-        b = "." * (self.barlen - int(frac * self.barlen))
-        c = f"{(self.current_step * 4):>{self.diglen}d}"
+        a = "\u2588" * a_len
+        b = "\u2591" * (self.barlen + self.splen) + " " * self.splen
+        b = (b[-(self.current_step % (self.barlen + 2 * self.splen)):] + 
+             b[:-(self.current_step % (self.barlen + 2 * self.splen))])
+        b = b[a_len:-(2 * self.splen)]
+        c = f"{(self.current_step * self.model.n_envs):>{self.diglen}d}"
         d = f"{self.total_rollout_steps:>{self.diglen}d}"
-        print(f" Rollout {(frac * 100):^3.0f}% [{a}>{b}] {c}/{d} steps", end="\r")
+        print(f" Rollout {(frac * 100):^3.0f}% {a}{b} {c}/{d} steps", end="\r")
 
         return True
     
