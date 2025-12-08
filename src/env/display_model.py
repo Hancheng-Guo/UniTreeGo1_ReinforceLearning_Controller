@@ -3,7 +3,9 @@ from src.config.config import CONFIG
 
 
 def extract_gym_env(env):
-    if isinstance(env, stable_baselines3.common.vec_env.dummy_vec_env.DummyVecEnv):
+    if isinstance(env, stable_baselines3.common.vec_env.vec_normalize.VecNormalize):
+        return env.venv.envs[env.num_envs - 1].env
+    elif isinstance(env, stable_baselines3.common.vec_env.dummy_vec_env.DummyVecEnv):
         return env.envs[env.num_envs - 1].env
     else: # gymnasium.wrappers.common.TimeLimit
         return env
