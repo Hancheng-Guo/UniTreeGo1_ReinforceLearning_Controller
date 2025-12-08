@@ -25,7 +25,7 @@ class ThreadTensorBoard():
 
     def _run(self):
         process = subprocess.Popen(
-            "tensorboard --logdir " + CONFIG["path"]["tensorboard"] + " --bind_all",
+            "tensorboard --logdir " + CONFIG["path"]["output"] + " --bind_all",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             )
