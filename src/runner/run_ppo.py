@@ -9,7 +9,7 @@ from stable_baselines3.common.vec_env import VecNormalize
 from datetime import datetime
 from PIL import Image
 
-from utils.display_progress_bar import ProgressBar
+from src.utils.display_progress_bar import ProgressBar
 from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
