@@ -88,16 +88,15 @@ class UniTreeGo1Env(AntEnv):
         hip_joints_decay = 0
         for i, hip_joint_addr in enumerate(self._hip_joint_addrs):
             hip_joints_pos = float(self.data.qpos[hip_joint_addr])
-            hip_joints_decay += (
-                radial_decay(
-                    hip_joints_pos,
-                    boundary=self.model.jnt_range[self._hip_joint_ids[i]],
-                    boundary_value=0.5) / len(self._hip_joint_addrs))
+            hip_joints_decay += radial_decay(
+                hip_joints_pos,
+                boundary=self.model.jnt_range[self._hip_joint_ids[i]])
+        hip_joints_decay /= len(self._hip_joint_addrs)
         
         z_decay = radial_decay(self.state_vector()[2],
                                center=0.27,
-                               boundary=self._healthy_z_range,
-                               boundary_value=0.5)
+                               boundary=(0.18, 0.36),
+                               boundary_value=0.1)
 
         return yaw_decay * pitch_decay * hip_joints_decay * z_decay * self.posture_reward_weight
 
@@ -142,7 +141,9 @@ class UniTreeGo1Env(AntEnv):
     def forward_reward(self):
         forward_info = self.forward_info
         x_velocity = forward_info["x_velocity"]
-        return x_velocity * self._forward_reward_weight
+        y_velocity = forward_info["y_velocity"]
+        _forward_reward = x_velocity / (1 + np.abs(y_velocity))
+        return _forward_reward * self._forward_reward_weight
     
 # endregion
 
