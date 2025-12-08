@@ -9,11 +9,12 @@ from stable_baselines3.common.vec_env import VecNormalize
 from datetime import datetime
 from PIL import Image
 
-from src.config.config import CONFIG, update_CONFIG, get_CONFIG
+from utils.display_progress_bar import ProgressBar
 from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
 from src.env.callbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressCallback
+from src.config.config import CONFIG, update_CONFIG, get_CONFIG
 
 
 def check_base_name(base_name):
@@ -174,6 +175,7 @@ def ppo_train(base_name=None, config_inheritance=True, note_skip=False):
 def ppo_test(test_name=None, n_tests=3, max_steps=1000, mode=""):
 
     test_name, test_dir = check_base_name(test_name)
+    bar = ProgressBar(total=max_steps, custom_str="Darwing")
 
     if test_name:
         test_env = make_env("demo")
@@ -185,18 +187,20 @@ def ppo_test(test_name=None, n_tests=3, max_steps=1000, mode=""):
 
         test_saver = TestSaver(test_env, test_name, test_dir)
         for i in range(n_tests):
-            for _ in range(max_steps):
+            for j in range(max_steps):
+                bar.update(j + 1)
                 action, _ = model.predict(obs, deterministic=True)
                 obs, reward, done, info = test_env.step(action)
                 if done:
                     break
                 test_saver.append()
+            bar.clear()
+            print(" > Render Saving...", end="\r")
             test_saver.save()
             test_saver.reset()
             obs = test_env.reset()
  
         test_env.close()
         plt.close('all')
-
-    print("\nModel %s test accomplished!\n" % test_name)
+        print("\nModel %s test accomplished!\n" % test_name)
     return test_name

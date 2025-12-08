@@ -3,6 +3,7 @@ import shutil
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.utils import FloatSchedule, ConstantSchedule
 # from src.render.render_tensorboard import init_log, update_log
+from utils.display_progress_bar import ProgressBar
 from src.utils.update_checkpoints_tree import update_checkpoints_tree
 from src.config.config import CONFIG, save_CONFIG
 
@@ -131,38 +132,23 @@ class AdaptiveLRCallback(BaseCallback):
 class ProgressCallback(BaseCallback):
     def __init__(self, verbose=0):
         super().__init__(verbose)
-        self.total_rollout_steps = None
+        self.bar = None
         self.current_step = None
-        self.barlen = 50
-        self.diglen = None
-        self.splen = 3
-        self.sppos = None
 
     def _on_training_start(self):
-        self.total_rollout_steps = self.model.n_steps * self.model.n_envs
-        self.diglen = len(f"{self.total_rollout_steps}")
+        self.bar = ProgressBar(total=self.model.n_steps * self.model.n_envs,
+                               custom_str="Rollout")
 
     def _on_rollout_start(self) -> None:
+        self.bar.reset()
         self.current_step = 0
-        self.sppos = 0
         return True
 
     def _on_step(self) -> bool:
         self.current_step += 1
-        frac = self.current_step * self.model.n_envs / self.total_rollout_steps
-        a_len = int(frac * self.barlen)
-
-        a = "\u2588" * a_len
-        b = "\u2591" * (self.barlen + self.splen) + " " * self.splen
-        b = (b[-(self.current_step % (self.barlen + 2 * self.splen)):] + 
-             b[:-(self.current_step % (self.barlen + 2 * self.splen))])
-        b = b[a_len:-(2 * self.splen)]
-        c = f"{(self.current_step * self.model.n_envs):>{self.diglen}d}"
-        d = f"{self.total_rollout_steps:>{self.diglen}d}"
-        print(f" Rollout {(frac * 100):^3.0f}% {a}{b} {c}/{d} steps", end="\r")
-
+        self.bar.update(self.current_step * self.model.n_envs)
         return True
     
     def _on_rollout_end(self) -> bool:
-        print("\033[2K\r", end="")
+        self.bar.clear()
         return True

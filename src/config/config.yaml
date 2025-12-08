@@ -14,7 +14,7 @@ train:
   healthy_z_max: 0.7
   healthy_pitch_min: -0.785
   healthy_pitch_max: 0.785
-  checkpoint_freq: 100000
+  checkpoint_freq: 200000
 
 demo:
   demo_type: "rgb_array" 
@@ -27,7 +27,7 @@ demo:
   mjc_render_width: 150
   mjc_render_height: 150
   plt_n_lines: 1
-  plt_x_range: 200
+  plt_x_range: 100
 
 algorithm:
   policy: "MlpPolicy"
