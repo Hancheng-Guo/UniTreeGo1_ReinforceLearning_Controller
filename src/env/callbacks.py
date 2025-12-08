@@ -3,7 +3,7 @@ import shutil
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.utils import FloatSchedule, ConstantSchedule
 # from src.render.render_tensorboard import init_log, update_log
-from utils.display_progress_bar import ProgressBar
+from src.utils.display_progress_bar import ProgressBar
 from src.utils.update_checkpoints_tree import update_checkpoints_tree
 from src.config.config import CONFIG, save_CONFIG
 
