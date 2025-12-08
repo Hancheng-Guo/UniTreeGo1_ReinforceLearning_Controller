@@ -1,131 +1,206 @@
 import imageio
 import os
 import io
-import matplotlib
-import shutil
+
+import re
 import matplotlib.pyplot as plt
-import numpy as np
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import VecNormalize
 from datetime import datetime
 from PIL import Image
 
-from src.config.config import CONFIG, update_CONFIG, save_CONFIG, get_CONFIG
+from utils.display_progress_bar import ProgressBar
 from src.render.render_tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
 from src.env.display_model import display_model
-from src.render.render_callbacks import RenderCallback
-from src.utils.get_next_filename import get_next_filename
-from src.utils.update_checkpoints_tree import update_checkpoints_tree
+from src.env.callbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressCallback
+from src.config.config import CONFIG, update_CONFIG, get_CONFIG
 
 
-def ppo_train(base_model_name=None, config_inheritance=True, demo=False, note_skip=False):
+def check_base_name(base_name):
+    if base_name:
+        pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(\d+)$')
+        match = pattern.match(base_name)
+        if match:
+            base_dir = os.path.join(CONFIG["path"]["output"], match.group(1))
+            return base_name, base_dir
+        else:
+            pattern = re.compile(r'^(mdl|env)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(\d+)\.(zip|pkl)$')
+            index = []
+            for filename in os.listdir(os.path.join(CONFIG["path"]["output"], base_name)):
+                match = pattern.match(filename)
+                if match:
+                    index.append(int(match.group(3)))
+            index.sort(reverse=True)
+            for i in range(len(index) - 1):
+                if index[i] == index[i + 1]:
+                    base_dir = os.path.join(CONFIG["path"]["output"], base_name)
+                    base_name = f"{base_name}_{index[i]}"
+                    return base_name, base_dir
+    return None, None
 
-    if note_skip:
-        note = ""
-    else:
-        note = input("\nPlease enter the notes for the current training model:\n > ")
-    tensorboard_thread = ThreadTensorBoard()
-    tensorboard_thread.run()
+def get_note(note_skip):
+    note = "" if note_skip else input("\nPlease enter the notes for the current training model:\n > ")
+    return note
 
-    model_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    train_env = make_env("train")
-    if base_model_name and config_inheritance:
-        update_CONFIG(CONFIG["path"]["config_backup"] + base_model_name + ".yaml")
+def get_save_name():
+    save_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    save_dir = os.path.join(CONFIG["path"]["output"], save_name)
+    if save_dir is not None:
+        os.makedirs(save_dir, exist_ok=True)
+    return save_name, save_dir
+
+def get_optional_kwargs(base_name, base_dir, config_inheritance):
+    if base_name and config_inheritance:
+        base_config = os.path.join(CONFIG["path"]["output"],
+                                   base_dir,
+                                   f"cfg_{base_name}.yaml")
+        update_CONFIG(base_config)
     optional_kwargs = get_CONFIG(field="algorithm",
                                  try_keys=["n_steps", "batch_size", "n_epochs",
-                                           "learning_rate", "clip_range", "gamma", 
-                                           "gae_lambda", "device", "verbose", "vf_coef",
-                                           ])
-    if base_model_name:
-        model = PPO.load(CONFIG["path"]["checkpoints"] + base_model_name + ".zip",
-                         env=train_env,
-                         **optional_kwargs)
+                                           "clip_range", "gamma", "gae_lambda",
+                                           "device", "verbose", "vf_coef",])
+    return optional_kwargs
+
+def load_model(env, base_name, base_dir, **kwargs):
+    if base_name:
+        base_model = os.path.join(base_dir, f"mdl_{base_name}.zip")
+        base_env = os.path.join(base_dir, f"env_{base_name}.pkl")
+        env = VecNormalize.load(base_env, env)
+        model = PPO.load(base_model, env=env, **kwargs)
     else:
+        env = VecNormalize(env, norm_obs=True, norm_reward=True)
         model = PPO(policy=CONFIG["algorithm"]["policy"],
-                    env=train_env,
-                    tensorboard_log=CONFIG["path"]["tensorboard"],
-                    **optional_kwargs)
-    display_model(train_env)
+                    learning_rate=CONFIG["algorithm"]["learning_rate_init"],
+                    env=env,
+                    **kwargs)
+    display_model(env)
+    return model, env
+
+class TestSaver():
+    def __init__(self, test_env, test_name, test_dir):
+        self.test_env = test_env
+        self.test_name = test_name
+        self.test_dir = test_dir
+        self.my_env = test_env.venv.envs[0].env.env.env.env
+        self.world_dt = self.my_env.dt * self.my_env.frame_skip
+
+        self.save_dir = os.path.join(test_dir, f"demo_{self.test_name}")
+        if not os.path.exists(self.save_dir):
+            os.makedirs(self.save_dir)
+        
+        _, plt_index = self._get_next_filename("plt", "gif")
+        _, mjc_index = self._get_next_filename("mjc", "gif")
+        self.target_index = max(plt_index, mjc_index) + 1
+
+        self.plt_frames = []
+        self.mjc_frames = []
+
+    def _get_next_filename(self, prefix, ext): # e.g. prefix="img", ext="gif"
+        pattern = re.compile(rf"{prefix}_{self.test_name}\[(\d+)\].{ext}$")
+        max_num = 0
+        for filename in os.listdir(self.save_dir): 
+            match = pattern.match(filename)
+            if match:
+                num = int(match.group(1))
+                if num > max_num:
+                    max_num = num
+        return f"{prefix}{max_num + 1}{ext}", max_num
     
-    if demo:
-        demo_env = make_env("demo", demo_type="multiple")
-        model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
-                    tb_log_name=model_name,
-                    callback=RenderCallback(demo_env),
-                    )
-        demo_env.close()
-    else:
-        model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
-                    tb_log_name=model_name,
-                    )
+    def reset(self):
+        self.my_env.plt_endline()
+        self.plt_frames = []
+        self.mjc_frames = []
+
+    def append(self):
+        if self.test_env.render_mode == "human":
+            plt_fig = plt.gcf()
+            buffer = io.BytesIO()
+            plt_fig.canvas.print_png(buffer)
+            buffer.write(buffer.getvalue())
+            plt_img = Image.open(buffer)
+            self.plt_frames.append(plt_img)
+
+            mjc_img = self.my_env.render("rgb_array")
+            self.mjc_frames.append(mjc_img)
+        else:
+            self.mjc_frames.append(self.my_env.mjc_img)
+            self.plt_frames.append(self.my_env.plt_img)
+
+    def save(self):
+        plt_path = os.path.join(self.save_dir,
+                                f"plt_{self.test_name}[{self.target_index}].gif")
+        imageio.mimsave(plt_path, self.plt_frames, fps=1/self.world_dt,
+                        loop=0, subrectangles=True, palettesize=4, optimize=True)
+        print(f"Saving matplot fig of demo to {plt_path}")
+
+        mjc_path = os.path.join(self.save_dir,
+                                f"mjc_{self.test_name}[{self.target_index}].gif")
+        imageio.mimsave(mjc_path, self.mjc_frames, fps=1/self.world_dt,
+                        loop=0, subrectangles=True, palettesize=8, optimize=True)
+        print(f"Saving mujoco render of demo to {mjc_path}")
+
+        self.target_index += 1
+
+
+def ppo_train(base_name=None, config_inheritance=True, note_skip=False):
+
+    note = get_note(note_skip)
+    base_name, base_dir = check_base_name(base_name)
+    save_name, save_dir = get_save_name()
+
+    tensorboard_thread = ThreadTensorBoard()
+    tensorboard_thread.run()
     
-    model.save(CONFIG["path"]["checkpoints"] + model_name + ".zip")
-    update_checkpoints_tree(child=model_name, parent=base_model_name, note=note)
-    shutil.copy2(CONFIG["path"]["env_class_py"], CONFIG["path"]["env_backup"] + model_name + ".py")
-    save_CONFIG(CONFIG["path"]["config_backup"] + model_name + ".yaml")
+    optional_kwargs = get_optional_kwargs(base_name, base_dir, config_inheritance)
+    train_env = make_env("train")
+    model, train_env = load_model(train_env, base_name, base_dir,
+                                  tensorboard_log=save_dir,
+                                  **optional_kwargs)
+    model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
+                tb_log_name=f"log_{save_name}",
+                callback=[ProgressCallback(),
+                          AdaptiveLRCallback(),
+                          CustomCheckpointCallback(save_name, save_dir,
+                                                   base_name, note)],)
     
     tensorboard_thread.stop()
     train_env.close()
     plt.close('all')
 
-    print("\nModel %s traning accomplished!\n" % model_name)
-    return model_name
+    print("\nModel %s traning accomplished!\n" % save_name)
+    return save_name
 
 
-def ppo_test(model_name=None, n_tests=3, max_steps=1000):
+def ppo_test(test_name=None, n_tests=3, max_steps=1000, mode=""):
 
-    if model_name:
-        env = make_env("demo", demo_type="single")
-        model = PPO.load(CONFIG["path"]["checkpoints"] + model_name,
-                         env=env,
-                         device=CONFIG["algorithm"]["device"]
-                         )
-        obs, info = env.reset()
+    test_name, test_dir = check_base_name(test_name)
+    bar = ProgressBar(total=max_steps, custom_str="Darwing")
 
-        world_dt = env.env.env.env.dt * env.env.env.env.frame_skip
-        filepath = CONFIG["path"]["demo"] + model_name.split('.')[0] + "/"
-        if not os.path.exists(filepath):
-            os.makedirs(filepath)
-        _, plt_index = get_next_filename(filepath, "plt_", ".gif")
-        _, mjc_index = get_next_filename(filepath, "mjc_", ".gif")
-        target_index = max(plt_index, mjc_index) + 1
+    if test_name:
+        test_env = make_env("demo")
+        model, test_env = load_model(test_env, test_name, test_dir,
+                                     device=CONFIG["algorithm"]["device"])
+        test_env.training = False
+        test_env.norm_reward = False
+        obs = test_env.reset()
 
+        test_saver = TestSaver(test_env, test_name, test_dir)
         for i in range(n_tests):
-            plt_frames = []
-            mjc_frames = []
-
-            for _ in range(max_steps):
+            for j in range(max_steps):
+                bar.update(j + 1)
                 action, _ = model.predict(obs, deterministic=True)
-                obs, reward, terminated, truncated, info = env.step(action)
-                if terminated or truncated:
+                obs, reward, done, info = test_env.step(action)
+                if done:
                     break
-
-                plt_fig = plt.gcf()
-                buffer = io.BytesIO()
-                plt_fig.canvas.print_png(buffer)
-                buffer.write(buffer.getvalue())
-                plt_img = Image.open(buffer)
-                plt_frames.append(plt_img)
-                
-                mjc_fig = env.env.env.env.render("rgb_array")
-                mjc_frames.append(mjc_fig)
-
-            env.env.env.env.plt_endline()
-            obs, info = env.reset()
-            imageio.mimsave(filepath + "plt_%d.gif" % target_index, plt_frames, fps=1/world_dt,
-                            loop=0, subrectangles=True, palettesize=4, optimize=True)
-            # mjc_frames = [
-            #     Image.fromarray(frame).resize(
-            #         (frame.shape[1] // 2, frame.shape[0] // 2),
-            #         Image.Resampling.BOX) for frame in mjc_frames
-            # ]
-            mjc_frames = [np.array(frame)[::2, ::2] for frame in mjc_frames]
-            imageio.mimsave(filepath + "mjc_%d.gif" % target_index, mjc_frames, fps=1/world_dt,
-                            loop=0, subrectangles=True, palettesize=8, optimize=True)
-            target_index += 1
-                    
-        env.close()
+                test_saver.append()
+            bar.clear()
+            print(" > Render Saving...", end="\r")
+            test_saver.save()
+            test_saver.reset()
+            obs = test_env.reset()
+ 
+        test_env.close()
         plt.close('all')
-
-    print("\nModel %s test accomplished!\n" % model_name)
-    return model_name
+        print("\nModel %s test accomplished!\n" % test_name)
+    return test_name
