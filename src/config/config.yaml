@@ -6,7 +6,7 @@ train:
   healthy_reward_weight: 1.
   posture_reward_weight: 1.
   state_reward_weight: 1.
-  state_reward_alpha: 0.2
+  state_reward_alpha: 0.1
   reset_noise_scale: 0.1
   frame_skip: 5
   max_episode_steps: 1000
