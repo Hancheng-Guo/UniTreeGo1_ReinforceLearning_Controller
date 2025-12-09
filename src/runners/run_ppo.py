@@ -9,11 +9,11 @@ from stable_baselines3.common.vec_env import VecNormalize
 from datetime import datetime
 from PIL import Image
 
-from src.utils.display_progress_bar import ProgressBar
-from src.render.render_tensorboard import ThreadTensorBoard
+from src.utils.progress_bar import ProgressBar
+from src.renders.tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
-from src.env.display_model import display_model
-from src.env.callbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressCallback
+from src.utils.display_model import display_model
+from src.callbacks.calbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressBarCallback, CustomTensorboardCallback
 from src.config.config import CONFIG, update_CONFIG, get_CONFIG
 
 
@@ -159,7 +159,8 @@ def ppo_train(base_name=None, config_inheritance=True, note_skip=False):
                                   **optional_kwargs)
     model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                 tb_log_name=f"log_{save_name}",
-                callback=[ProgressCallback(),
+                callback=[ProgressBarCallback(),
+                          CustomTensorboardCallback(),
                           AdaptiveLRCallback(),
                           CustomCheckpointCallback(save_name, save_dir,
                                                    base_name, note)],)
