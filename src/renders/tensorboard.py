@@ -5,12 +5,12 @@ from typing import Optional, List
 from src.config.config import CONFIG
 
 
-@dataclass
-class LogData:
-    reward_sum: Optional[float] = 0
-    # imu: Optional[List[float]] = None
-    # encoders: Optional[List[float]] = None
-    # battery: Optional[float] = None
+# @dataclass
+# class LogData:
+#     reward_sum: Optional[float] = 0
+#     # imu: Optional[List[float]] = None
+#     # encoders: Optional[List[float]] = None
+#     # battery: Optional[float] = None
 
 
 class ThreadTensorBoard(): 
@@ -45,9 +45,9 @@ class ThreadTensorBoard():
         print("TensorBoard stopped")
 
 
-def init_log():
-    return LogData()
+# def init_log():
+#     return LogData()
     
-def update_log(log_data, action, obs_predict, obs, reward, terminated, truncated, info):
-    log_data.reward_sum += reward
-    return log_data
+# def update_log(log_data, action, obs_predict, obs, reward, terminated, truncated, info):
+#     log_data.reward_sum += reward
+#     return log_data

@@ -10,9 +10,9 @@ from datetime import datetime
 from PIL import Image
 
 from src.utils.display_progress_bar import ProgressBar
-from src.render.render_tensorboard import ThreadTensorBoard
+from src.renders.tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
-from src.env.display_model import display_model
+from src.utils.display_model import display_model
 from src.env.callbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressCallback
 from src.config.config import CONFIG, update_CONFIG, get_CONFIG
 

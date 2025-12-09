@@ -7,8 +7,8 @@ from enum import IntEnum
 from gymnasium.spaces import Box
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 
-from src.render.render_matplotlib import init_plt_render
-from src.render.render_mujoco import set_tracking_camera
+from src.renders.matplotlib import PltRenderer
+from src.utils.set_mujoco import set_tracking_camera
 from src.utils.decays import radial_decay, clip_exp_decay
 from src.config.config import CONFIG
 
@@ -30,7 +30,8 @@ class UniTreeGo1Env(AntEnv):
         super().__init__(**kwargs)
         # for demo
         self.render_mode = render_mode
-        self.plt_render, self.plt_endline = init_plt_render(self.render_mode)
+        if render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+            self.plt_render = PltRenderer(self.render_mode)
         self.mjc_img = None
         self.plt_img = None
         # for healthy_reward
@@ -238,7 +239,7 @@ class UniTreeGo1Env(AntEnv):
             self.mjc_img = self.render()
             self.plt_img = self.plt_render(self.state_vector(), info)
             if terminated:
-                self.plt_endline()
+                self.plt_render.reset()
 
         # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
         return observation, reward, terminated, False, info
