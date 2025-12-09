@@ -13,7 +13,8 @@ from src.utils.decays import radial_decay, clip_exp_decay
 from src.config.config import CONFIG
 
 
-foot_names = ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
+feet = ["FR", "FL", "RR", "RL"]
+calfs = ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
 hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 
 class UniTreeGo1Env(AntEnv):
@@ -44,6 +45,8 @@ class UniTreeGo1Env(AntEnv):
                                  for hip_joint_id in self._hip_joint_ids]
         # for posture_reward
         self.posture_reward_weight = posture_reward_weight
+        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
+                         for foot in feet]
         # for state_reward
         self.state_reward_weight = state_reward_weight
         self.state_reward_alpha = state_reward_alpha
@@ -52,35 +55,47 @@ class UniTreeGo1Env(AntEnv):
         self._total_mass = self.model.body_mass.sum()
         self._contact_force_scale = self._total_mass * np.linalg.norm(self.model.opt.gravity)
         # for adding foot_landed/airborne_time to obs
-        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, foot_name) 
-                          for foot_name in foot_names]
-        self._foot_landed_time = np.zeros(len(foot_names))
-        self._foot_airborne_time = np.zeros(len(foot_names))
-        obs_size = self.observation_space.shape[0] + 2 * len(foot_names)
+        self._calf_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, calf) 
+                          for calf in calfs]
+        self._foot_landed_time = np.zeros(len(calfs))
+        self._foot_airborne_time = np.zeros(len(calfs))
+        obs_size = self.observation_space.shape[0] + 2 * len(calfs)
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
         self.observation_structure["foot_landed_time"] = len(self._foot_landed_time)
         self.observation_structure["foot_airborne_time"] = len(self._foot_airborne_time)
 
-# region >>> Posture Reward
+# region | Posture Reward
 
     @property
     def posture_info(self):
         mat = np.zeros((9, 1))
         mujoco.mju_quat2Mat(mat, self.state_vector()[3:7]) # Convert quaternion to 3D rotation matrix
+
+        feet_dpos = self.data.geom_xpos[self._foot_ids] - self.data_old.geom_xpos[self._foot_ids]
+        diff_dpos = [feet_dpos[0] - feet_dpos[3], feet_dpos[1] - feet_dpos[2]]
+        min_dpos = [
+            feet_dpos[0] if np.linalg.norm(feet_dpos[0]) < np.linalg.norm(feet_dpos[3]) else feet_dpos[3],
+            feet_dpos[1] if np.linalg.norm(feet_dpos[1]) < np.linalg.norm(feet_dpos[2]) else feet_dpos[2]
+        ]
+        normed_feet_dr = [np.linalg.norm(diff_dpos[i]) / np.linalg.norm(min_dpos[i]) for i in range(2)]
+        self.state_vector()
+
         posture_info = {
             "yaw": np.arctan2(mat[3], mat[0])[0],
             "pitch": np.arcsin(-mat[6])[0],
             "roll": np.arctan2(mat[7], mat[8])[0],
+            "normed_feet_dr": normed_feet_dr,
         }
         return posture_info
     
     @property
     def posture_reward(self):
+        posture_info = self.posture_info
 
-        yaw_decay = radial_decay(self.posture_info["yaw"],
+        yaw_decay = radial_decay(posture_info["yaw"],
                                  boundary=np.pi)
 
-        pitch_decay = radial_decay(self.posture_info["pitch"],
+        pitch_decay = radial_decay(posture_info["pitch"],
                                    boundary=(
                                        CONFIG["train"]["healthy_pitch_min"],
                                        CONFIG["train"]["healthy_pitch_max"]),
@@ -98,12 +113,18 @@ class UniTreeGo1Env(AntEnv):
                                center=0.27,
                                boundary=(0.18, 0.36),
                                boundary_value=0.1)
+        
+        feet_dr_decays = [clip_exp_decay(posture_info["normed_feet_dr"][i]) 
+                         for i in range(2)]
 
-        return yaw_decay * pitch_decay * hip_joints_decay * z_decay * self.posture_reward_weight
+        return (yaw_decay * pitch_decay * 
+                hip_joints_decay * z_decay * 
+                np.prod(feet_dr_decays) *
+                self.posture_reward_weight)
 
 # endregion
 
-# region >>> Healthy Reward
+# region | Healthy Reward
     
     @property
     def is_alive(self):
@@ -123,7 +144,7 @@ class UniTreeGo1Env(AntEnv):
     
 # endregion
 
-# region >>> Forward Reward
+# region | Forward Reward
     
     @property
     def forward_info(self):
@@ -144,11 +165,14 @@ class UniTreeGo1Env(AntEnv):
         x_velocity = forward_info["x_velocity"]
         y_velocity = forward_info["y_velocity"]
         _forward_reward = x_velocity / (1 + np.abs(y_velocity))
-        return _forward_reward * self._forward_reward_weight
+        state_loop_time = self.state_info["state_loop_time"]
+        state_loop_gain = clip_exp_decay(1 / (state_loop_time + 0.0001),
+                                         alpha=1-CONFIG["train"]["state_reward_alpha"])
+        return _forward_reward * self._forward_reward_weight * state_loop_gain
     
 # endregion
 
-# region >>> Contact Cost
+# region | Contact Cost
 
     @property
     def contact_info(self):
@@ -174,13 +198,13 @@ class UniTreeGo1Env(AntEnv):
     
 # endregion
 
-# region >>> State Reward
+# region | State Reward
 
     @property
     def foot_obs(self):
-        for i, foot_id in enumerate(self._foot_ids):
-            foot_fz = self.contact_forces[foot_id][2]
-            if foot_fz > 1: # landed
+        for i, calf_id in enumerate(self._calf_ids):
+            calf_fz = self.contact_forces[calf_id][2]
+            if calf_fz > 1: # landed
                 self._foot_airborne_time[i] = 0
                 self._foot_landed_time[i] += 1
             else:
@@ -190,11 +214,12 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def state_info(self):
-        bonus, state_reward_time = self.fsm.update(self.foot_obs)
+        bonus, state_reward_time, state_loop_time = self.fsm.update(self.foot_obs)
         state_info = {
             "state": self.fsm.state,
             "bonus": bonus,
             "state_reward_time": state_reward_time,
+            "state_loop_time": state_loop_time,
         }
         return state_info
 
@@ -278,7 +303,7 @@ class UniTreeGo1Env(AntEnv):
 
         return reward, reward_info
 
-# region >>> Finite State Machine
+# region | Finite State Machine
 
 class State(IntEnum):
     s0 = 0  # init state
@@ -300,6 +325,7 @@ class UniTreeGo1FSM:
     def __init__(self):
         self.state = State.s0
         self._state_duration = 0
+        self.loop_duration = 0
         self.trans = {
             State.s0: self.s0,
             State.s1: self.s1,
@@ -347,7 +373,8 @@ class UniTreeGo1FSM:
         target_state = self.check(obs)
         bonus, has_reward = self.trans[self.state](target_state)
         reward_time = self._state_duration if has_reward else -1
-        return bonus, reward_time
+        self.loop_duration = self.loop_duration + 1 if has_reward else -1
+        return bonus, reward_time, self.loop_duration
 
     def s0(self, target_state):
         self.state = State.s0 if target_state == State.x0 else target_state
