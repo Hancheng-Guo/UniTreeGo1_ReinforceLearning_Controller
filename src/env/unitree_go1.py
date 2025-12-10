@@ -14,7 +14,6 @@ from src.config.config import CONFIG
 
 
 feet = ["FR", "FL", "RR", "RL"]
-calfs = ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
 hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 
 class UniTreeGo1Env(AntEnv):
@@ -55,14 +54,83 @@ class UniTreeGo1Env(AntEnv):
         self._total_mass = self.model.body_mass.sum()
         self._contact_force_scale = self._total_mass * np.linalg.norm(self.model.opt.gravity)
         # for adding foot_landed/airborne_time to obs
-        self._calf_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, calf) 
-                          for calf in calfs]
-        self._foot_landed_time = np.zeros(len(calfs))
-        self._foot_airborne_time = np.zeros(len(calfs))
-        obs_size = self.observation_space.shape[0] + 2 * len(calfs)
+        self._floor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
+        self._foot_landed_time = np.zeros(len(feet))
+        self._foot_airborne_time = np.zeros(len(feet))
+        obs_size = self.observation_space.shape[0] + 2 * len(feet)
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
         self.observation_structure["foot_landed_time"] = len(self._foot_landed_time)
         self.observation_structure["foot_airborne_time"] = len(self._foot_airborne_time)
+
+    def render(self, render_mode=None):
+        if render_mode:
+            return self.mujoco_renderer.render(render_mode)
+        return self.mujoco_renderer.render(self.render_mode)
+    
+    def reset(self, *, seed=None, options=None):
+        self.fsm.reset()
+        options = options or {}
+        options["init_key"] = CONFIG["algorithm"]["reset_state"]
+        ob, info = super().reset(seed=seed, options=options)
+        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+            set_tracking_camera(self)
+        return ob, info
+    
+    def step(self, action):
+        self.data_old =  copy.deepcopy(self.data)
+        self.do_simulation(action, self.frame_skip)
+
+        observation = self._get_obs()
+        reward, reward_info = self._get_rew(action)
+        terminated = (not self.is_alive) and self._terminate_when_unhealthy
+        info = {
+            "x_position": self.data.qpos[0],
+            "y_position": self.data.qpos[1],
+            "distance_from_origin": np.linalg.norm(self.data.qpos[0:2], ord=2),
+            **reward_info,
+        }
+
+        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+            self.mjc_img = self.render()
+            self.plt_img = self.plt_render(self.state_vector(), info)
+            if terminated:
+                self.plt_render.reset()
+
+        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
+        return observation, reward, terminated, False, info
+    
+    def _get_obs(self):
+        obs = super()._get_obs()
+        landed_obs, airborne_obs = self.foot_obs
+        return np.concatenate((obs, landed_obs.flatten(), airborne_obs.flatten()))
+    
+    def _get_rew(self, action):
+        forward_reward = self.forward_reward
+        healthy_reward = self.healthy_reward
+        state_reward = self.state_reward
+        posture_reward = self.posture_reward
+        rewards = forward_reward + healthy_reward + state_reward + posture_reward
+
+        ctrl_cost = self.control_cost(action)
+        contact_cost = self.contact_cost
+        costs = ctrl_cost + contact_cost
+
+        reward = rewards - costs
+        reward_info = {
+            "reward_forward": forward_reward,
+            "reward_healthy": healthy_reward,
+            "reward_state": state_reward,
+            "reward_posture": posture_reward,
+            "reward_ctrl": -ctrl_cost,
+            "reward_contact": -contact_cost,
+            "reward_total": reward,
+            **self.forward_info,
+            **self.posture_info,
+            **self.contact_info,
+            **self.state_info,
+        }
+
+        return reward, reward_info
 
 # region | Posture Reward
 
@@ -79,6 +147,13 @@ class UniTreeGo1Env(AntEnv):
         ]
         normed_feet_dr = [np.linalg.norm(diff_dpos[i]) / np.linalg.norm(min_dpos[i]) for i in range(2)]
         self.state_vector()
+
+        # 获得主体在xoy平面的单位向量
+        # 获得两足端的xy坐标
+        # 计算两足端相对中轴距离，并取最小值
+        # 计算两足端中点相对中轴距离
+        # 使用最小两足端相对中轴距离归一化中点相对中轴距离
+        # radial_decay
 
         posture_info = {
             "yaw": np.arctan2(mat[3], mat[0])[0],
@@ -166,8 +241,8 @@ class UniTreeGo1Env(AntEnv):
         y_velocity = forward_info["y_velocity"]
         _forward_reward = x_velocity / (1 + np.abs(y_velocity))
         state_loop_time = self.state_info["state_loop_time"]
-        state_loop_gain = clip_exp_decay(1 / (state_loop_time + 0.0001),
-                                         alpha=1-CONFIG["train"]["state_reward_alpha"])
+        state_loop_gain = clip_exp_decay(1 / (state_loop_time + 0.01),
+                                         alpha=1+self.state_reward_alpha)
         return _forward_reward * self._forward_reward_weight * state_loop_gain
     
 # endregion
@@ -201,15 +276,23 @@ class UniTreeGo1Env(AntEnv):
 # region | State Reward
 
     @property
+    def _are_feet_touching_ground(self):
+        are_touching = []
+        for foot_id in self._foot_ids:
+            is_touching = None
+            for c in self.data.contact:
+                is_touching = ((c.geom1 == foot_id and c.geom2 == self._floor_id) or
+                               (c.geom1 == self._floor_id and c.geom2 == foot_id))
+                if is_touching:
+                    break
+            are_touching.append(is_touching)
+        return are_touching
+
+    @property
     def foot_obs(self):
-        for i, calf_id in enumerate(self._calf_ids):
-            calf_fz = self.contact_forces[calf_id][2]
-            if calf_fz > 1: # landed
-                self._foot_airborne_time[i] = 0
-                self._foot_landed_time[i] += 1
-            else:
-                self._foot_landed_time[i] = 0
-                self._foot_airborne_time[i] += 1
+        for i, is_touching in enumerate(self._are_feet_touching_ground):
+            self._foot_airborne_time[i] = 0 if is_touching else self._foot_airborne_time[i] + 1
+            self._foot_landed_time[i] = self._foot_landed_time[i] + 1 if is_touching else 0
         return self._foot_landed_time, self._foot_airborne_time
     
     @property
@@ -231,77 +314,7 @@ class UniTreeGo1Env(AntEnv):
                                        alpha=self.state_reward_alpha)
         return (bonus + _state_reward) * self.state_reward_weight
 
-
 # endregion
-
-    def render(self, render_mode=None):
-        if render_mode:
-            return self.mujoco_renderer.render(render_mode)
-        return self.mujoco_renderer.render(self.render_mode)
-    
-    def reset(self, *, seed=None, options=None):
-        options = options or {}
-        options["init_key"] = CONFIG["algorithm"]["reset_state"]
-        ob, info = super().reset(seed=seed, options=options)
-        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
-            set_tracking_camera(self)
-        return ob, info
-    
-    def step(self, action):
-        self.data_old =  copy.deepcopy(self.data)
-        self.do_simulation(action, self.frame_skip)
-
-        observation = self._get_obs()
-        reward, reward_info = self._get_rew(action)
-        terminated = (not self.is_alive) and self._terminate_when_unhealthy
-        info = {
-            "x_position": self.data.qpos[0],
-            "y_position": self.data.qpos[1],
-            "distance_from_origin": np.linalg.norm(self.data.qpos[0:2], ord=2),
-            **reward_info,
-        }
-
-        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
-            self.mjc_img = self.render()
-            self.plt_img = self.plt_render(self.state_vector(), info)
-            if terminated:
-                self.plt_render.reset()
-
-        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
-        return observation, reward, terminated, False, info
-    
-    def _get_obs(self):
-        obs = super()._get_obs()
-        landed_obs, airborne_obs = self.foot_obs
-        return np.concatenate((obs, landed_obs.flatten(), airborne_obs.flatten()))
-    
-    def _get_rew(self, action):
-        forward_reward = self.forward_reward
-        healthy_reward = self.healthy_reward
-        state_reward = self.state_reward
-        posture_reward = self.posture_reward
-        rewards = forward_reward + healthy_reward + state_reward + posture_reward
-
-        ctrl_cost = self.control_cost(action)
-        contact_cost = self.contact_cost
-        costs = ctrl_cost + contact_cost
-
-        reward = rewards - costs
-        reward_info = {
-            "reward_forward": forward_reward,
-            "reward_healthy": healthy_reward,
-            "reward_state": state_reward,
-            "reward_posture": posture_reward,
-            "reward_ctrl": -ctrl_cost,
-            "reward_contact": -contact_cost,
-            "reward_total": reward,
-            **self.forward_info,
-            **self.posture_info,
-            **self.contact_info,
-            **self.state_info,
-        }
-
-        return reward, reward_info
 
 # region | Finite State Machine
 
@@ -324,8 +337,8 @@ class State(IntEnum):
 class UniTreeGo1FSM:
     def __init__(self):
         self.state = State.s0
-        self._state_duration = 0
-        self.loop_duration = 0
+        self._state_duration = -1
+        self.loop_duration = -1
         self.trans = {
             State.s0: self.s0,
             State.s1: self.s1,
@@ -375,6 +388,11 @@ class UniTreeGo1FSM:
         reward_time = self._state_duration if has_reward else -1
         self.loop_duration = self.loop_duration + 1 if has_reward else -1
         return bonus, reward_time, self.loop_duration
+    
+    def reset(self):
+        self.state = State.s0
+        self._state_duration = -1
+        self.loop_duration = -1
 
     def s0(self, target_state):
         self.state = State.s0 if target_state == State.x0 else target_state

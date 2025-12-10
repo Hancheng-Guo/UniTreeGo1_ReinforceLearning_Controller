@@ -108,7 +108,7 @@ class TestSaver():
         return f"{prefix}{max_num + 1}{ext}", max_num
     
     def reset(self):
-        self.my_env.plt_endline()
+        self.my_env.plt_render.reset()
         self.plt_frames = []
         self.mjc_frames = []
 
