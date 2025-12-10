@@ -13,7 +13,7 @@ from src.utils.decays import radial_decay, clip_exp_decay
 from src.config.config import CONFIG
 
 
-foot_names = ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
+feet = ["FR", "FL", "RR", "RL"]
 hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 
 class UniTreeGo1Env(AntEnv):
@@ -44,6 +44,8 @@ class UniTreeGo1Env(AntEnv):
                                  for hip_joint_id in self._hip_joint_ids]
         # for posture_reward
         self.posture_reward_weight = posture_reward_weight
+        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
+                         for foot in feet]
         # for state_reward
         self.state_reward_weight = state_reward_weight
         self.state_reward_alpha = state_reward_alpha
@@ -52,162 +54,13 @@ class UniTreeGo1Env(AntEnv):
         self._total_mass = self.model.body_mass.sum()
         self._contact_force_scale = self._total_mass * np.linalg.norm(self.model.opt.gravity)
         # for adding foot_landed/airborne_time to obs
-        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_BODY, foot_name) 
-                          for foot_name in foot_names]
-        self._foot_landed_time = np.zeros(len(foot_names))
-        self._foot_airborne_time = np.zeros(len(foot_names))
-        obs_size = self.observation_space.shape[0] + 2 * len(foot_names)
+        self._floor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
+        self._foot_landed_time = np.zeros(len(feet))
+        self._foot_airborne_time = np.zeros(len(feet))
+        obs_size = self.observation_space.shape[0] + 2 * len(feet)
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
         self.observation_structure["foot_landed_time"] = len(self._foot_landed_time)
         self.observation_structure["foot_airborne_time"] = len(self._foot_airborne_time)
-
-# region >>> Posture Reward
-
-    @property
-    def posture_info(self):
-        mat = np.zeros((9, 1))
-        mujoco.mju_quat2Mat(mat, self.state_vector()[3:7]) # Convert quaternion to 3D rotation matrix
-        posture_info = {
-            "yaw": np.arctan2(mat[3], mat[0])[0],
-            "pitch": np.arcsin(-mat[6])[0],
-            "roll": np.arctan2(mat[7], mat[8])[0],
-        }
-        return posture_info
-    
-    @property
-    def posture_reward(self):
-
-        yaw_decay = radial_decay(self.posture_info["yaw"],
-                                 boundary=np.pi)
-
-        pitch_decay = radial_decay(self.posture_info["pitch"],
-                                   boundary=(
-                                       CONFIG["train"]["healthy_pitch_min"],
-                                       CONFIG["train"]["healthy_pitch_max"]),
-                                   boundary_value=0.5)
-        
-        hip_joints_decay = 0
-        for i, hip_joint_addr in enumerate(self._hip_joint_addrs):
-            hip_joints_pos = float(self.data.qpos[hip_joint_addr])
-            hip_joints_decay += radial_decay(
-                hip_joints_pos,
-                boundary=self.model.jnt_range[self._hip_joint_ids[i]])
-        hip_joints_decay /= len(self._hip_joint_addrs)
-        
-        z_decay = radial_decay(self.state_vector()[2],
-                               center=0.27,
-                               boundary=(0.18, 0.36),
-                               boundary_value=0.1)
-
-        return yaw_decay * pitch_decay * hip_joints_decay * z_decay * self.posture_reward_weight
-
-# endregion
-
-# region >>> Healthy Reward
-    
-    @property
-    def is_alive(self):
-        state = self.state_vector()
-        z_min, z_max = self._healthy_z_range
-        pitch_min, pitch_max = self._healthy_pitch_range
-        is_alive = (
-            np.isfinite(state).all()
-            and z_min <= state[2] <= z_max
-            and pitch_min <= self.posture_info["pitch"] <= pitch_max
-            )
-        return is_alive
-    
-    @property
-    def healthy_reward(self):
-        return self.is_alive * self.healthy_reward_weight
-    
-# endregion
-
-# region >>> Forward Reward
-    
-    @property
-    def forward_info(self):
-        xy_position_before = self.data_old.body(self._main_body).xpos[:2].copy()
-        xy_position_after = self.data.body(self._main_body).xpos[:2].copy()
-        xy_velocity = (xy_position_after - xy_position_before) / self.dt
-        x_velocity, y_velocity = xy_velocity
-
-        forward_info = {
-            "x_velocity": x_velocity,
-            "y_velocity": y_velocity,
-        }
-        return forward_info
-    
-    @property
-    def forward_reward(self):
-        forward_info = self.forward_info
-        x_velocity = forward_info["x_velocity"]
-        y_velocity = forward_info["y_velocity"]
-        _forward_reward = x_velocity / (1 + np.abs(y_velocity))
-        return _forward_reward * self._forward_reward_weight
-    
-# endregion
-
-# region >>> Contact Cost
-
-    @property
-    def contact_info(self):
-        norm_contact_forces = self.contact_forces / self._contact_force_scale
-        min_value, max_value = self._contact_force_range
-        clip_contact_forces = np.clip(norm_contact_forces, min_value, max_value)   
-        clip_contact_forces_squared_sum = np.sum(np.square(clip_contact_forces))
-
-        contact_info = {
-            "clip_contact_forces_squared_sum": clip_contact_forces_squared_sum,
-        }
-        return contact_info
-    
-    @property
-    def contact_forces(self):
-        raw_contact_forces = self.data.cfrc_ext     
-        return raw_contact_forces
-    
-    @property
-    def contact_cost(self):
-        contact_info = self.contact_info
-        return self._contact_cost_weight * contact_info["clip_contact_forces_squared_sum"]
-    
-# endregion
-
-# region >>> State Reward
-
-    @property
-    def foot_obs(self):
-        for i, foot_id in enumerate(self._foot_ids):
-            foot_fz = self.contact_forces[foot_id][2]
-            if foot_fz > 1: # landed
-                self._foot_airborne_time[i] = 0
-                self._foot_landed_time[i] += 1
-            else:
-                self._foot_landed_time[i] = 0
-                self._foot_airborne_time[i] += 1
-        return self._foot_landed_time, self._foot_airborne_time
-    
-    @property
-    def state_info(self):
-        bonus, state_reward_time = self.fsm.update(self.foot_obs)
-        state_info = {
-            "state": self.fsm.state,
-            "bonus": bonus,
-            "state_reward_time": state_reward_time,
-        }
-        return state_info
-
-    @property
-    def state_reward(self):
-        state_info = self.state_info
-        bonus = state_info["bonus"]
-        _state_reward = clip_exp_decay(state_info["state_reward_time"],
-                                       alpha=self.state_reward_alpha)
-        return (bonus + _state_reward) * self.state_reward_weight
-
-
-# endregion
 
     def render(self, render_mode=None):
         if render_mode:
@@ -215,6 +68,7 @@ class UniTreeGo1Env(AntEnv):
         return self.mujoco_renderer.render(self.render_mode)
     
     def reset(self, *, seed=None, options=None):
+        self.fsm.reset()
         options = options or {}
         options["init_key"] = CONFIG["algorithm"]["reset_state"]
         ob, info = super().reset(seed=seed, options=options)
@@ -278,7 +132,191 @@ class UniTreeGo1Env(AntEnv):
 
         return reward, reward_info
 
-# region >>> Finite State Machine
+# region | Posture Reward
+
+    @property
+    def posture_info(self):
+        mat = np.zeros((9, 1))
+        mujoco.mju_quat2Mat(mat, self.state_vector()[3:7]) # Convert quaternion to 3D rotation matrix
+
+        feet_dpos = self.data.geom_xpos[self._foot_ids] - self.data_old.geom_xpos[self._foot_ids]
+        diff_dpos = [feet_dpos[0] - feet_dpos[3], feet_dpos[1] - feet_dpos[2]]
+        min_dpos = [
+            feet_dpos[0] if np.linalg.norm(feet_dpos[0]) < np.linalg.norm(feet_dpos[3]) else feet_dpos[3],
+            feet_dpos[1] if np.linalg.norm(feet_dpos[1]) < np.linalg.norm(feet_dpos[2]) else feet_dpos[2]
+        ]
+        normed_feet_dr = [np.linalg.norm(diff_dpos[i]) / np.linalg.norm(min_dpos[i]) for i in range(2)]
+        self.state_vector()
+
+        # 获得主体在xoy平面的单位向量
+        # 获得两足端的xy坐标
+        # 计算两足端相对中轴距离，并取最小值
+        # 计算两足端中点相对中轴距离
+        # 使用最小两足端相对中轴距离归一化中点相对中轴距离
+        # radial_decay
+
+        posture_info = {
+            "yaw": np.arctan2(mat[3], mat[0])[0],
+            "pitch": np.arcsin(-mat[6])[0],
+            "roll": np.arctan2(mat[7], mat[8])[0],
+            "normed_feet_dr": normed_feet_dr,
+        }
+        return posture_info
+    
+    @property
+    def posture_reward(self):
+        posture_info = self.posture_info
+
+        yaw_decay = radial_decay(posture_info["yaw"],
+                                 boundary=np.pi)
+
+        pitch_decay = radial_decay(posture_info["pitch"],
+                                   boundary=(
+                                       CONFIG["train"]["healthy_pitch_min"],
+                                       CONFIG["train"]["healthy_pitch_max"]),
+                                   boundary_value=0.5)
+        
+        hip_joints_decay = 0
+        for i, hip_joint_addr in enumerate(self._hip_joint_addrs):
+            hip_joints_pos = float(self.data.qpos[hip_joint_addr])
+            hip_joints_decay += radial_decay(
+                hip_joints_pos,
+                boundary=self.model.jnt_range[self._hip_joint_ids[i]])
+        hip_joints_decay /= len(self._hip_joint_addrs)
+        
+        z_decay = radial_decay(self.state_vector()[2],
+                               center=0.27,
+                               boundary=(0.18, 0.36),
+                               boundary_value=0.1)
+        
+        feet_dr_decays = [clip_exp_decay(posture_info["normed_feet_dr"][i]) 
+                         for i in range(2)]
+
+        return (yaw_decay * pitch_decay * 
+                hip_joints_decay * z_decay * 
+                np.prod(feet_dr_decays) *
+                self.posture_reward_weight)
+
+# endregion
+
+# region | Healthy Reward
+    
+    @property
+    def is_alive(self):
+        state = self.state_vector()
+        z_min, z_max = self._healthy_z_range
+        pitch_min, pitch_max = self._healthy_pitch_range
+        is_alive = (
+            np.isfinite(state).all()
+            and z_min <= state[2] <= z_max
+            and pitch_min <= self.posture_info["pitch"] <= pitch_max
+            )
+        return is_alive
+    
+    @property
+    def healthy_reward(self):
+        return self.is_alive * self.healthy_reward_weight
+    
+# endregion
+
+# region | Forward Reward
+    
+    @property
+    def forward_info(self):
+        xy_position_before = self.data_old.body(self._main_body).xpos[:2].copy()
+        xy_position_after = self.data.body(self._main_body).xpos[:2].copy()
+        xy_velocity = (xy_position_after - xy_position_before) / self.dt
+        x_velocity, y_velocity = xy_velocity
+
+        forward_info = {
+            "x_velocity": x_velocity,
+            "y_velocity": y_velocity,
+        }
+        return forward_info
+    
+    @property
+    def forward_reward(self):
+        forward_info = self.forward_info
+        x_velocity = forward_info["x_velocity"]
+        y_velocity = forward_info["y_velocity"]
+        _forward_reward = x_velocity / (1 + np.abs(y_velocity))
+        state_loop_time = self.state_info["state_loop_time"]
+        state_loop_gain = clip_exp_decay(1 / (state_loop_time + 0.01),
+                                         alpha=1+self.state_reward_alpha)
+        return _forward_reward * self._forward_reward_weight * state_loop_gain
+    
+# endregion
+
+# region | Contact Cost
+
+    @property
+    def contact_info(self):
+        norm_contact_forces = self.contact_forces / self._contact_force_scale
+        min_value, max_value = self._contact_force_range
+        clip_contact_forces = np.clip(norm_contact_forces, min_value, max_value)   
+        clip_contact_forces_squared_sum = np.sum(np.square(clip_contact_forces))
+
+        contact_info = {
+            "clip_contact_forces_squared_sum": clip_contact_forces_squared_sum,
+        }
+        return contact_info
+    
+    @property
+    def contact_forces(self):
+        raw_contact_forces = self.data.cfrc_ext     
+        return raw_contact_forces
+    
+    @property
+    def contact_cost(self):
+        contact_info = self.contact_info
+        return self._contact_cost_weight * contact_info["clip_contact_forces_squared_sum"]
+    
+# endregion
+
+# region | State Reward
+
+    @property
+    def _are_feet_touching_ground(self):
+        are_touching = []
+        for foot_id in self._foot_ids:
+            is_touching = None
+            for c in self.data.contact:
+                is_touching = ((c.geom1 == foot_id and c.geom2 == self._floor_id) or
+                               (c.geom1 == self._floor_id and c.geom2 == foot_id))
+                if is_touching:
+                    break
+            are_touching.append(is_touching)
+        return are_touching
+
+    @property
+    def foot_obs(self):
+        for i, is_touching in enumerate(self._are_feet_touching_ground):
+            self._foot_airborne_time[i] = 0 if is_touching else self._foot_airborne_time[i] + 1
+            self._foot_landed_time[i] = self._foot_landed_time[i] + 1 if is_touching else 0
+        return self._foot_landed_time, self._foot_airborne_time
+    
+    @property
+    def state_info(self):
+        bonus, state_reward_time, state_loop_time = self.fsm.update(self.foot_obs)
+        state_info = {
+            "state": self.fsm.state,
+            "bonus": bonus,
+            "state_reward_time": state_reward_time,
+            "state_loop_time": state_loop_time,
+        }
+        return state_info
+
+    @property
+    def state_reward(self):
+        state_info = self.state_info
+        bonus = state_info["bonus"]
+        _state_reward = clip_exp_decay(state_info["state_reward_time"],
+                                       alpha=self.state_reward_alpha)
+        return (bonus + _state_reward) * self.state_reward_weight
+
+# endregion
+
+# region | Finite State Machine
 
 class State(IntEnum):
     s0 = 0  # init state
@@ -299,7 +337,8 @@ class State(IntEnum):
 class UniTreeGo1FSM:
     def __init__(self):
         self.state = State.s0
-        self._state_duration = 0
+        self._state_duration = -1
+        self.loop_duration = -1
         self.trans = {
             State.s0: self.s0,
             State.s1: self.s1,
@@ -347,7 +386,13 @@ class UniTreeGo1FSM:
         target_state = self.check(obs)
         bonus, has_reward = self.trans[self.state](target_state)
         reward_time = self._state_duration if has_reward else -1
-        return bonus, reward_time
+        self.loop_duration = self.loop_duration + 1 if has_reward else -1
+        return bonus, reward_time, self.loop_duration
+    
+    def reset(self):
+        self.state = State.s0
+        self._state_duration = -1
+        self.loop_duration = -1
 
     def s0(self, target_state):
         self.state = State.s0 if target_state == State.x0 else target_state
