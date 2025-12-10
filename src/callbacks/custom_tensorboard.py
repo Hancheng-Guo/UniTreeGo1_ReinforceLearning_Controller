@@ -11,6 +11,7 @@ target_items = {
     "reward_forward": 0,
     "reward_state": 0,
     "reward_posture": 0,
+    "state_loop_time": 0,
     }
 
 
@@ -23,49 +24,60 @@ class CustomTensorboardCallback(BaseCallback):
         self.data = None
 
     def _on_training_start(self) -> bool:
-        self.writer = SummaryWriter(os.path.join(self.logger.dir, "tmp"))
-        self.log_freq = (-self.log_freq % self.model.n_envs) + self.log_freq
+        self.writer = [SummaryWriter(os.path.join(self.logger.dir,  f"env_{env_id}"))
+                       for env_id in range(self.model.n_envs)]
+        self.log_freq = min((-self.log_freq % self.model.n_envs) + self.log_freq,
+                            self.model.n_envs * self.model.n_steps)
         return True
     
     def _on_rollout_start(self) -> bool:
         self.rollout_index = self.num_timesteps
         self._data_reset()
-        self._nan_dump()
+        # self._data_split()
         return True
 
     def _on_step(self) -> bool:
         infos = self.locals["infos"]
-        for i in range(self.model.n_envs):
+        for env_id in range(self.model.n_envs):
             for key, _ in target_items.items():
-                self.data[i][key] += infos[i][key]
+                self.data[env_id][key] += infos[env_id][key]
 
-        if (self.num_timesteps - self.rollout_index) % self.log_freq == 0:
+        timesteps_past = self.num_timesteps - self.rollout_index
+        if (timesteps_past % self.log_freq == 0) and (timesteps_past != 0):
             self._data_dump()
             self._data_reset()
         return True
 
     def _on_training_end(self):
-        self.writer.close()
-        files = os.listdir(os.path.join(self.logger.dir, "tmp"))
-        for file in files:
-            shutil.move(os.path.join(self.logger.dir, "tmp", file), self.logger.dir)
-        shutil.rmtree(os.path.join(self.logger.dir, "tmp"))
+        for env_id in range(self.n_envs):
+            self.writer[env_id].close()
+            files = os.listdir(os.path.join(self.logger.dir, f"env_{env_id}"))
+            for file in files:
+                shutil.move(os.path.join(self.logger.dir, f"env_{env_id}", file), self.logger.dir)
+            shutil.rmtree(os.path.join(self.logger.dir, f"env_{env_id}"))
         return True
     
+    def _tb_log_name(self, key, suffix):
+        return f"custom/{key}_{suffix}"
+    
     def _data_reset(self):
-        self.data = [{key: value for key, value in target_items.items()} for _ in range(self.model.n_envs)]
+        self.data = [{key: value for key, value in target_items.items()}
+                     for _ in range(self.model.n_envs)]
 
     def _data_dump(self):
-        for i in range(self.model.n_envs):
+        for env_id in range(self.model.n_envs):
             for key, _ in target_items.items():
-                self.writer.add_scalar(
-                    f"custom/smooth_{key}_{i}",
-                    self.data[i][key] / self.log_freq,
+                self.writer[env_id].add_scalar(
+                    self._tb_log_name(key, "mean"),
+                    self.data[env_id][key] / self.log_freq * self.model.n_envs,
                     self.num_timesteps)
-        self.writer.flush()
+        self.writer[env_id].flush()
                 
-    def _nan_dump(self):
-        for i in range(self.model.n_envs):
+    def _data_split(self):
+        for env_id in range(self.model.n_envs):
             for key, _ in target_items.items():
-                self.writer.add_scalar(f"custom/smooth_{key}_{i}", float("nan"), self.num_timesteps)
-        self.writer.flush()
+                self.writer[env_id].add_scalar(
+                    self._tb_log_name(key, "mean"),
+                    float("inf"),
+                    self.num_timesteps)
+        self.writer[env_id].flush()

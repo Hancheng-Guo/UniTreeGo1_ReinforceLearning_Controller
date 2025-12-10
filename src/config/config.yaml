@@ -15,7 +15,7 @@ train:
   healthy_pitch_min: -0.785
   healthy_pitch_max: 0.785
   checkpoint_freq: 200000
-  custom_log_freq: 20
+  custom_log_freq: 2048
 
 demo:
   demo_type: "rgb_array" 
