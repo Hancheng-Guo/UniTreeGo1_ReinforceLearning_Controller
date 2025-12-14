@@ -1,7 +1,7 @@
 import imageio
 import os
 import io
-
+import numpy as np
 import re
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
@@ -12,8 +12,8 @@ from PIL import Image
 from src.utils.progress_bar import ProgressBar
 from src.renders.tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
-from src.utils.display_model import display_model
-from src.callbacks.calbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressBarCallback, CustomTensorboardCallback
+from src.utils.display_model import display_obs, display_body, display_action
+from src.callbacks.calbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressBarCallback, CustomTensorboardCallback, StageScheduleCallback
 from src.config.config import CONFIG, update_CONFIG, get_CONFIG
 
 
@@ -62,7 +62,7 @@ def get_optional_kwargs(base_name, base_dir, config_inheritance):
                                            "device", "verbose", "vf_coef",])
     return optional_kwargs
 
-def load_model(env, base_name, base_dir, **kwargs):
+def load_model(env, base_name, base_dir, config, **kwargs):
     if base_name:
         base_model = os.path.join(base_dir, f"mdl_{base_name}.zip")
         base_env = os.path.join(base_dir, f"env_{base_name}.pkl")
@@ -74,8 +74,32 @@ def load_model(env, base_name, base_dir, **kwargs):
                     learning_rate=CONFIG["algorithm"]["learning_rate_init"],
                     env=env,
                     **kwargs)
-    display_model(env)
-    return model, env
+        
+    if CONFIG["is"]["model_body_part_visiable"]:
+        display_body(env)
+    if CONFIG["is"]["model_obs_space_visiable"]:
+        display_obs(env)
+    if CONFIG["is"]["model_action_space_visiable"]:
+        display_action(env)
+
+    try:
+        base_stage = os.path.join(base_dir, f"cst_{base_name}.npy")
+    except:
+        base_stage = None
+    callback_kwargs = {
+        # for StageScheduleCallback
+        "base_stage": base_stage,
+        # for CustomTensorboardCallback
+        "log_freq": CONFIG["train"]["custom_log_freq"],
+        # for CustomCheckpointCallback
+        "save_freq": CONFIG["train"]["checkpoint_freq"],
+        "env_py_path": CONFIG["path"]["env_py"],
+        "checkpoint_tree_file_path": CONFIG["path"]["checkpoint_tree"],
+        "checkpoints_path": CONFIG["path"]["output"],
+        "base_name": base_name
+    }
+
+    return model, env, callback_kwargs
 
 class TestSaver():
     def __init__(self, test_env, test_name, test_dir):
@@ -143,27 +167,30 @@ class TestSaver():
         self.target_index += 1
 
 
-def ppo_train(base_name=None, config_inheritance=True, note_skip=False):
+def ppo_train(base_name=None, config_inheritance=False, note_skip=False):
 
     note = get_note(note_skip)
     base_name, base_dir = check_base_name(base_name)
     save_name, save_dir = get_save_name()
 
-    tensorboard_thread = ThreadTensorBoard()
+    tensorboard_thread = ThreadTensorBoard(log_path=CONFIG["path"]["output"])
     tensorboard_thread.run()
     
     optional_kwargs = get_optional_kwargs(base_name, base_dir, config_inheritance)
-    train_env = make_env("train")
-    model, train_env = load_model(train_env, base_name, base_dir,
-                                  tensorboard_log=save_dir,
-                                  **optional_kwargs)
+    train_env = make_env("train", config=CONFIG)
+    model, train_env, callback_kwargs = load_model(train_env, base_name, base_dir,
+                                                   tensorboard_log=save_dir,
+                                                   config=CONFIG,
+                                                   **optional_kwargs)
     model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
                 tb_log_name=f"log_{save_name}",
-                callback=[ProgressBarCallback(),
-                          CustomTensorboardCallback(),
-                          AdaptiveLRCallback(),
-                          CustomCheckpointCallback(save_name, save_dir,
-                                                   base_name, note)],)
+                callback=[StageScheduleCallback(**callback_kwargs),
+                          ProgressBarCallback(**callback_kwargs),
+                          CustomTensorboardCallback(**callback_kwargs),
+                          AdaptiveLRCallback(**callback_kwargs),
+                          CustomCheckpointCallback(save_name, save_dir, note,
+                                                   **callback_kwargs)
+                         ],)
     
     tensorboard_thread.stop()
     train_env.close()
@@ -179,9 +206,10 @@ def ppo_test(test_name=None, n_tests=3, max_steps=1000, mode=""):
     bar = ProgressBar(total=max_steps, custom_str="Darwing")
 
     if test_name:
-        test_env = make_env("demo")
-        model, test_env = load_model(test_env, test_name, test_dir,
-                                     device=CONFIG["algorithm"]["device"])
+        test_env = make_env("demo", config=CONFIG)
+        model, test_env, callback_kwargs = load_model(test_env, test_name, test_dir,
+                                                      config=CONFIG)
+        test_env.envs[0].env.env.env.env.stage = np.load(callback_kwargs["base_stage"])
         test_env.training = False
         test_env.norm_reward = False
         obs = test_env.reset()

@@ -1,25 +1,28 @@
 import os
 import shutil
-import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 from torch.utils.tensorboard import SummaryWriter
-
-from src.config.config import CONFIG
 
 
 target_items = {
     "reward_forward": 0,
-    "reward_state": 0,
     "reward_posture": 0,
+    # "reward_state": 0,
     "state_loop_time": 0,
+    "x_velocity": 0,
+    "feet_filted_vx_mse": 0,
+    "stage": 0,
     }
 
 
 class CustomTensorboardCallback(BaseCallback):
-    def __init__(self, verbose=0):
+    def __init__(self,
+                 log_freq: int = 2048,
+                 verbose=0,
+                 **kwargs):
         super().__init__(verbose)
         self.writer = None
-        self.log_freq = CONFIG["train"]["custom_log_freq"]
+        self.log_freq = log_freq
         self.rollout_index = None
         self.data = None
 
@@ -49,7 +52,8 @@ class CustomTensorboardCallback(BaseCallback):
         return True
 
     def _on_training_end(self):
-        for env_id in range(self.n_envs):
+        self._data_split(step_shift=1)
+        for env_id in range(self.model.n_envs):
             self.writer[env_id].close()
             files = os.listdir(os.path.join(self.logger.dir, f"env_{env_id}"))
             for file in files:
@@ -73,11 +77,11 @@ class CustomTensorboardCallback(BaseCallback):
                     self.num_timesteps)
         self.writer[env_id].flush()
                 
-    def _data_split(self):
+    def _data_split(self, step_shift=0):
         for env_id in range(self.model.n_envs):
             for key, _ in target_items.items():
                 self.writer[env_id].add_scalar(
                     self._tb_log_name(key, "mean"),
                     float("inf"),
-                    self.num_timesteps)
+                    self.num_timesteps + step_shift)
         self.writer[env_id].flush()

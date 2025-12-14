@@ -1,16 +1,15 @@
 import mujoco
 import copy
-import time
-import matplotlib.pyplot as plt
 import numpy as np
+from collections import deque
 from enum import IntEnum
 from gymnasium.spaces import Box
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 
 from src.renders.matplotlib import PltRenderer
-from src.utils.set_mujoco import set_tracking_camera
-from src.utils.decays import radial_decay, clip_exp_decay
-from src.config.config import CONFIG
+from src.renders.mujoco import set_tracking_camera
+from src.utils.decays import radial_decay, clip_exp_decay, clip_exp_gain, clip_step_decay, StepGain
+from src.callbacks.stage_schedule import Stage
 
 
 feet = ["FR", "FL", "RR", "RL"]
@@ -19,41 +18,63 @@ hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 class UniTreeGo1Env(AntEnv):
     def __init__(
             self,
+            reset_state: str = "home",
             healthy_pitch_range: tuple[float, float] = (0.2, 1.0),
             healthy_z_range: tuple[float, float] = (0.15, 0.6),
+            healthy_z_target: float = 0.27,
             healthy_reward_weight: float = 1.,
             posture_reward_weight: float = 1.,
+            forward_reward_weight: float = 1.,
+            gait_reward_alpha: float = 100.,
             state_reward_weight: float = 1.,
             state_reward_alpha: float = 0.2,
+            state_reward_hold: float = 5,
+            ctrl_cost_weight: float = 0.05,
+            contact_cost_weight: float = 5.e-4,
             render_mode: str = None,
+            plt_n_lines: int = 1,
+            plt_x_range: int = 200,
             **kwargs):
         super().__init__(**kwargs)
+        self._reset_state = reset_state
+        self.stage = None # update in callback
         # for demo
         self.render_mode = render_mode
         if render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
-            self.plt_render = PltRenderer(self.render_mode)
+            self.plt_render = PltRenderer(self.render_mode,
+                                          plt_n_lines=plt_n_lines,
+                                          plt_x_range=plt_x_range)
+            self.plt_render.reset()
         self.mjc_img = None
         self.plt_img = None
         # for healthy_reward
-        self.healthy_reward_weight = healthy_reward_weight
+        self._healthy_reward_weight = healthy_reward_weight
         self._healthy_pitch_range = healthy_pitch_range
         self._healthy_z_range = healthy_z_range
+        self._healthy_z_target = healthy_z_target
         self._hip_joint_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, hip_joint)
                          for hip_joint in hip_joints]
         self._hip_joint_addrs = [self.model.jnt_qposadr[hip_joint_id]
                                  for hip_joint_id in self._hip_joint_ids]
         # for posture_reward
-        self.posture_reward_weight = posture_reward_weight
-        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
-                         for foot in feet]
+        self._posture_reward_weight = posture_reward_weight
+        # for forward_reward
+        self._forward_reward_weight = forward_reward_weight
+        self._gait_reward_alpha = gait_reward_alpha
         # for state_reward
-        self.state_reward_weight = state_reward_weight
-        self.state_reward_alpha = state_reward_alpha
+        self._state_reward_weight = state_reward_weight
+        self._state_reward_alpha = state_reward_alpha
+        self._state_reward_hold = state_reward_hold
         self.fsm = UniTreeGo1FSM()
+        # for ctrl_cost
+        self._ctrl_cost_weight = ctrl_cost_weight
         # for contact_cost
+        self._contact_cost_weight = contact_cost_weight
         self._total_mass = self.model.body_mass.sum()
         self._contact_force_scale = self._total_mass * np.linalg.norm(self.model.opt.gravity)
         # for adding foot_landed/airborne_time to obs
+        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
+                          for foot in feet]
         self._floor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
         self._foot_landed_time = np.zeros(len(feet))
         self._foot_airborne_time = np.zeros(len(feet))
@@ -70,10 +91,11 @@ class UniTreeGo1Env(AntEnv):
     def reset(self, *, seed=None, options=None):
         self.fsm.reset()
         options = options or {}
-        options["init_key"] = CONFIG["algorithm"]["reset_state"]
+        options["init_key"] = self._reset_state
         ob, info = super().reset(seed=seed, options=options)
         if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
             set_tracking_camera(self)
+            self.plt_render.reset()
         return ob, info
     
     def step(self, action):
@@ -117,49 +139,37 @@ class UniTreeGo1Env(AntEnv):
 
         reward = rewards - costs
         reward_info = {
-            "reward_forward": forward_reward,
+            "stage": self.stage,
             "reward_healthy": healthy_reward,
+            "reward_forward": forward_reward,
             "reward_state": state_reward,
             "reward_posture": posture_reward,
             "reward_ctrl": -ctrl_cost,
             "reward_contact": -contact_cost,
             "reward_total": reward,
             **self.forward_info,
+            **self.state_info,
             **self.posture_info,
             **self.contact_info,
-            **self.state_info,
         }
-
         return reward, reward_info
 
 # region | Posture Reward
 
     @property
-    def posture_info(self):
-        mat = np.zeros((9, 1))
+    def _get_rotation_matrix(self):
+        mat = np.zeros((9, 1)) # R00 R01 R02 R10 R11 R12 R20 R21 R22
         mujoco.mju_quat2Mat(mat, self.state_vector()[3:7]) # Convert quaternion to 3D rotation matrix
+        return mat
 
-        feet_dpos = self.data.geom_xpos[self._foot_ids] - self.data_old.geom_xpos[self._foot_ids]
-        diff_dpos = [feet_dpos[0] - feet_dpos[3], feet_dpos[1] - feet_dpos[2]]
-        min_dpos = [
-            feet_dpos[0] if np.linalg.norm(feet_dpos[0]) < np.linalg.norm(feet_dpos[3]) else feet_dpos[3],
-            feet_dpos[1] if np.linalg.norm(feet_dpos[1]) < np.linalg.norm(feet_dpos[2]) else feet_dpos[2]
-        ]
-        normed_feet_dr = [np.linalg.norm(diff_dpos[i]) / np.linalg.norm(min_dpos[i]) for i in range(2)]
-        self.state_vector()
-
-        # 获得主体在xoy平面的单位向量
-        # 获得两足端的xy坐标
-        # 计算两足端相对中轴距离，并取最小值
-        # 计算两足端中点相对中轴距离
-        # 使用最小两足端相对中轴距离归一化中点相对中轴距离
-        # radial_decay
+    @property
+    def posture_info(self):
+        mat = self._get_rotation_matrix
 
         posture_info = {
             "yaw": np.arctan2(mat[3], mat[0])[0],
             "pitch": np.arcsin(-mat[6])[0],
             "roll": np.arctan2(mat[7], mat[8])[0],
-            "normed_feet_dr": normed_feet_dr,
         }
         return posture_info
     
@@ -171,9 +181,7 @@ class UniTreeGo1Env(AntEnv):
                                  boundary=np.pi)
 
         pitch_decay = radial_decay(posture_info["pitch"],
-                                   boundary=(
-                                       CONFIG["train"]["healthy_pitch_min"],
-                                       CONFIG["train"]["healthy_pitch_max"]),
+                                   boundary=self._healthy_pitch_range,
                                    boundary_value=0.5)
         
         hip_joints_decay = 0
@@ -185,17 +193,13 @@ class UniTreeGo1Env(AntEnv):
         hip_joints_decay /= len(self._hip_joint_addrs)
         
         z_decay = radial_decay(self.state_vector()[2],
-                               center=0.27,
-                               boundary=(0.18, 0.36),
+                               center=self._healthy_z_target,
+                               boundary=self._healthy_z_target-self._healthy_z_range[0],
                                boundary_value=0.1)
         
-        feet_dr_decays = [clip_exp_decay(posture_info["normed_feet_dr"][i]) 
-                         for i in range(2)]
-
-        return (yaw_decay * pitch_decay * 
-                hip_joints_decay * z_decay * 
-                np.prod(feet_dr_decays) *
-                self.posture_reward_weight)
+        return (yaw_decay * pitch_decay * z_decay * 
+                max(hip_joints_decay, (1 - self.stage / Stage.late)) * 
+                self._posture_reward_weight)
 
 # endregion
 
@@ -215,7 +219,7 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def healthy_reward(self):
-        return self.is_alive * self.healthy_reward_weight
+        return self.is_alive * self._healthy_reward_weight
     
 # endregion
 
@@ -228,22 +232,47 @@ class UniTreeGo1Env(AntEnv):
         xy_velocity = (xy_position_after - xy_position_before) / self.dt
         x_velocity, y_velocity = xy_velocity
 
+        mat = self._get_rotation_matrix
+        body_x = np.array([mat[0], mat[3], mat[6]]).reshape(-1)
+        body_x = body_x / np.linalg.norm(body_x)
+
+        feet_dpos = self.data.geom_xpos[self._foot_ids] - self.data_old.geom_xpos[self._foot_ids]
+        feet_dx = np.dot(body_x, feet_dpos.T)
+        feet_vx = feet_dx / self.dt
+        foot_filted_vx = feet_vx[self._are_feet_touching_ground]
+        if foot_filted_vx.size >= 2:
+            feet_filted_vx_mse = np.mean((foot_filted_vx - np.mean(foot_filted_vx))**2)
+        else:
+            feet_filted_vx_mse = 0
+
         forward_info = {
             "x_velocity": x_velocity,
             "y_velocity": y_velocity,
+            "feet_vx": feet_vx,
+            "feet_filted_vx_mse": feet_filted_vx_mse,
         }
         return forward_info
     
     @property
     def forward_reward(self):
+
         forward_info = self.forward_info
         x_velocity = forward_info["x_velocity"]
         y_velocity = forward_info["y_velocity"]
         _forward_reward = x_velocity / (1 + np.abs(y_velocity))
+
         state_loop_time = self.state_info["state_loop_time"]
-        state_loop_gain = clip_exp_decay(1 / (state_loop_time + 0.01),
-                                         alpha=1+self.state_reward_alpha)
-        return _forward_reward * self._forward_reward_weight * state_loop_gain
+        state_loop_gain = clip_exp_gain(state_loop_time,
+                                        alpha=1-self._state_reward_alpha,
+                                        x_shift=-0.5
+                                        )
+        
+        feet_filted_vx_mse = forward_info["feet_filted_vx_mse"]
+        feet_vx_decay = clip_exp_decay(feet_filted_vx_mse, alpha=self._gait_reward_alpha)
+
+        return (_forward_reward * self._forward_reward_weight *
+                max(state_loop_gain, 1 - self.stage / Stage.late) *
+                max(feet_vx_decay, 1 - max(self.stage - Stage.mid, 0)))
     
 # endregion
 
@@ -279,7 +308,7 @@ class UniTreeGo1Env(AntEnv):
     def _are_feet_touching_ground(self):
         are_touching = []
         for foot_id in self._foot_ids:
-            is_touching = None
+            is_touching = False
             for c in self.data.contact:
                 is_touching = ((c.geom1 == foot_id and c.geom2 == self._floor_id) or
                                (c.geom1 == self._floor_id and c.geom2 == foot_id))
@@ -309,10 +338,18 @@ class UniTreeGo1Env(AntEnv):
     @property
     def state_reward(self):
         state_info = self.state_info
-        bonus = state_info["bonus"]
-        _state_reward = clip_exp_decay(state_info["state_reward_time"],
-                                       alpha=self.state_reward_alpha)
-        return (bonus + _state_reward) * self.state_reward_weight
+        state_loop_time = state_info["state_loop_time"]
+        state_loop_gain = clip_exp_gain(state_loop_time,
+                                        alpha=1-self._state_reward_alpha,
+                                        x_shift=-0.5
+                                        )
+        # bonus = state_info["bonus"]
+        state_decay = clip_step_decay(state_info["state_reward_time"],
+                                        alpha=self._state_reward_alpha,
+                                        x_shift=self._state_reward_hold)
+        # return (bonus + state_decay) * self._state_reward_weight
+        return (self._state_reward_weight *
+                state_decay * max(self.stage - Stage.mid, 0))
 
 # endregion
 
