@@ -3,7 +3,7 @@ from src.utils.progress_bar import ProgressBar
 
 
 class ProgressBarCallback(BaseCallback):
-    def __init__(self, verbose=0):
+    def __init__(self, verbose=0, **kwargs):
         super().__init__(verbose)
         self.bar = None
         self.current_step = None
