@@ -15,9 +15,9 @@ class CustomCheckpointCallback(BaseCallback):
                  save_freq: int = CONFIG["train"]["checkpoint_freq"],
                  save_vecnormalize: bool = True,
                  verbose: int = 2,
+                 **kwargs
                  ):
         super().__init__(verbose)
-        self.save_freq = save_freq
         self.save_name = save_name
         self.save_dir = save_dir
         self.base_name = base_name
@@ -43,26 +43,38 @@ class CustomCheckpointCallback(BaseCallback):
         self.model.save(model_path)
         if self.verbose >= 2:
             print(f"Saving model to {model_path}")
+
         # save vecnormalized env
         env_path = os.path.join(self.save_dir, f"env_{self._counted_save_name}.pkl")
         if self.save_vecnormalize and self.model.get_vec_normalize_env() is not None:
             self.model.get_vec_normalize_env().save(env_path)
             if self.verbose >= 2:
                 print(f"Saving vecnormalized env to {env_path}")
+
         # update checkpoints tree
         update_checkpoints_tree(child=self._counted_save_name, parent=self.base_name, note=self.note)
         self.base_name = self._counted_save_name
+
         # save config
         config_path = os.path.join(self.save_dir, f"cfg_{self._counted_save_name}.yaml")
         save_CONFIG(config_path)
         if self.verbose >= 2:
             print(f"Saving config to {config_path}")
+
         # save origin py.file of customize env
         backup_path = os.path.join(self.save_dir, f"bkp_{self._counted_save_name}.py")
         shutil.copy2(CONFIG["path"]["env_class_py"], backup_path)
         if self.verbose >= 2:
             print(f"Saving origin py.file of customize env to {backup_path}")
 
+        # save training stage
+        stage = self.model.env.venv.envs[0].env.env.env.env.stage
+        stage_path = os.path.join(self.save_dir, f"cst_{self._counted_save_name}.npy")
+        np.save(stage_path, stage)
+        if self.verbose >= 2:
+            print(f"Saving training stage to {stage_path}")
+
+        print()
         self.model.lr_schedule = lr_schedule_tmp
         self.save_count += 1
         return True
