@@ -1,14 +1,13 @@
 import mujoco
 import copy
-import time
-import matplotlib.pyplot as plt
 import numpy as np
+from collections import deque
 from enum import IntEnum
 from gymnasium.spaces import Box
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 
 from src.renders.matplotlib import PltRenderer
-from src.utils.set_mujoco import set_tracking_camera
+from src.renders.mujoco import set_tracking_camera
 from src.utils.decays import radial_decay, clip_exp_decay, clip_exp_gain, clip_step_decay, StepGain
 from src.callbacks.stage_schedule import Stage
 
@@ -19,6 +18,7 @@ hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 class UniTreeGo1Env(AntEnv):
     def __init__(
             self,
+            reset_state: str = "home",
             healthy_pitch_range: tuple[float, float] = (0.2, 1.0),
             healthy_z_range: tuple[float, float] = (0.15, 0.6),
             healthy_z_target: float = 0.27,
@@ -32,13 +32,19 @@ class UniTreeGo1Env(AntEnv):
             ctrl_cost_weight: float = 0.05,
             contact_cost_weight: float = 5.e-4,
             render_mode: str = None,
+            plt_n_lines: int = 1,
+            plt_x_range: int = 200,
             **kwargs):
         super().__init__(**kwargs)
+        self._reset_state = reset_state
         self.stage = None # update in callback
         # for demo
         self.render_mode = render_mode
         if render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
-            self.plt_render = PltRenderer(self.render_mode)
+            self.plt_render = PltRenderer(self.render_mode,
+                                          plt_n_lines=plt_n_lines,
+                                          plt_x_range=plt_x_range)
+            self.plt_render.reset()
         self.mjc_img = None
         self.plt_img = None
         # for healthy_reward
@@ -85,10 +91,11 @@ class UniTreeGo1Env(AntEnv):
     def reset(self, *, seed=None, options=None):
         self.fsm.reset()
         options = options or {}
-        options["init_key"] = CONFIG["algorithm"]["reset_state"]
+        options["init_key"] = self._reset_state
         ob, info = super().reset(seed=seed, options=options)
         if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
             set_tracking_camera(self)
+            self.plt_render.reset()
         return ob, info
     
     def step(self, action):

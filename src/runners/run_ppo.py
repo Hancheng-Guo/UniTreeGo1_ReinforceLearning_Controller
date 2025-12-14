@@ -12,7 +12,7 @@ from PIL import Image
 from src.utils.progress_bar import ProgressBar
 from src.renders.tensorboard import ThreadTensorBoard
 from src.env.make_env import make_env
-from src.utils.display_model import display_model
+from src.utils.display_model import display_obs, display_body, display_action
 from src.callbacks.calbacks import CustomCheckpointCallback, AdaptiveLRCallback, ProgressBarCallback, CustomTensorboardCallback, StageScheduleCallback
 from src.config.config import CONFIG, update_CONFIG, get_CONFIG
 
@@ -167,13 +167,13 @@ class TestSaver():
         self.target_index += 1
 
 
-def ppo_train(base_name=None, config_inheritance=True, note_skip=False):
+def ppo_train(base_name=None, config_inheritance=False, note_skip=False):
 
     note = get_note(note_skip)
     base_name, base_dir = check_base_name(base_name)
     save_name, save_dir = get_save_name()
 
-    tensorboard_thread = ThreadTensorBoard()
+    tensorboard_thread = ThreadTensorBoard(log_path=CONFIG["path"]["output"])
     tensorboard_thread.run()
     
     optional_kwargs = get_optional_kwargs(base_name, base_dir, config_inheritance)
