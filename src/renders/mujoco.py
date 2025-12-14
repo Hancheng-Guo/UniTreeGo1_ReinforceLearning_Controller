@@ -3,7 +3,6 @@ import os
 import shutil
 import xml.etree.ElementTree as ET
 
-from src.config.config import CONFIG
 
 def set_tracking_camera(env):
     camera_id = mujoco.mj_name2id(env.model, mujoco.mjtObj.mjOBJ_CAMERA, "tracking")
@@ -13,10 +12,8 @@ def set_tracking_camera(env):
     env.camera_id = camera_id
     env.mujoco_renderer.camera_id = camera_id
 
-def modify_model_camera():
+def modify_model_camera(dir_original, dir_modified, camera_pos, camera_xyaxes):
 
-    dir_original = CONFIG["path"]["model_dir_original"]
-    dir_modified = CONFIG["path"]["model_dir_modified"]
     os.makedirs(dir_modified, exist_ok=True)
     for root, dirs, files in os.walk(dir_original):
         rel_path = os.path.relpath(root, dir_original)
@@ -35,6 +32,6 @@ def modify_model_camera():
     if camera is None:
         raise ValueError(f"Camera 'tracking' not found in XML.")
     
-    camera.set("pos", CONFIG["demo"]["camera_pos"])
-    camera.set("xyaxes", CONFIG["demo"]["camera_xyaxes"])
+    camera.set("pos", camera_pos)
+    camera.set("xyaxes", camera_xyaxes)
     xml_tree.write(dir_modified + "go1.xml")
