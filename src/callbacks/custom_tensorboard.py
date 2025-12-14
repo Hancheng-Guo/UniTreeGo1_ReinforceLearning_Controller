@@ -12,14 +12,18 @@ target_items = {
     "reward_state": 0,
     "reward_posture": 0,
     "state_loop_time": 0,
+    "stage": 0,
     }
 
 
 class CustomTensorboardCallback(BaseCallback):
-    def __init__(self, verbose=0):
+    def __init__(self,
+                 log_freq: int = 2048,
+                 verbose=0,
+                 **kwargs):
         super().__init__(verbose)
         self.writer = None
-        self.log_freq = CONFIG["train"]["custom_log_freq"]
+        self.log_freq = log_freq
         self.rollout_index = None
         self.data = None
 
