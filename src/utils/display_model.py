@@ -1,5 +1,5 @@
 import stable_baselines3
-from src.config.config import CONFIG
+import mujoco
 
 
 def extract_gym_env(env):
@@ -9,7 +9,6 @@ def extract_gym_env(env):
         return env.envs[env.num_envs - 1].env
     else: # gymnasium.wrappers.common.TimeLimit
         return env
-    
 
 def print_state_space(model, skipped_qpos):
     state_count = 0
@@ -71,14 +70,14 @@ def print_state_space(model, skipped_qpos):
         else:
             print("display qvel error!")
 
-
-def display_state(env):
+def display_obs(env):
+    env = extract_gym_env(env)
     mujoco_model = env.unwrapped.model
     skipped_qpos = env.unwrapped.observation_structure['skipped_qpos']
     print_state_space(mujoco_model, skipped_qpos)
 
-
 def display_body(env):
+    env = extract_gym_env(env)
     model = env.unwrapped.model
     n_fill = 0
     for i in range(model.nbody):
@@ -89,16 +88,16 @@ def display_body(env):
     for i in range(model.nbody):
         print("[%3d] %s > pos: %s" % (i, model.body(i).name.rjust(n_fill), ["%+.4f" % x for x in model.body(i).pos]))
 
-
-def display_model(env):
+def display_action(env):
     env = extract_gym_env(env)
-    if CONFIG["is"]["model_state_def_visiable"]:
-        display_state(env)
-    if CONFIG["is"]["model_body_part_visiable"]:
-        display_body(env)
-        
+    model = env.unwrapped.model
+    print("\n")
+    print("=== ACTION ===")
+    for i in range(model.nu):
+        act_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_ACTUATOR, i)
 
-        
+        # actuator 作用的 joint id
+        joint_id = model.actuator_trnid[i][0]
+        joint_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_JOINT, joint_id)
 
-        
-
+        print(f"action[{i}] -> actuator: {act_name}, joint: {joint_name}")

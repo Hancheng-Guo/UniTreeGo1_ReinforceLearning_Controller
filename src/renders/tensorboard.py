@@ -2,11 +2,12 @@ import subprocess
 import threading
 from dataclasses import dataclass
 from typing import Optional, List
-from src.config.config import CONFIG
 
 
 class ThreadTensorBoard(): 
-    def __init__(self):
+    def __init__(self,
+                 log_path: str = ".",):
+        self.log_path = log_path
         self.thread = None
         self.process = None
 
@@ -17,7 +18,7 @@ class ThreadTensorBoard():
 
     def _run(self):
         process = subprocess.Popen(
-            "tensorboard --logdir " + CONFIG["path"]["output"] + " --bind_all",
+            "tensorboard --logdir " + self.log_path + " --bind_all",
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             )
