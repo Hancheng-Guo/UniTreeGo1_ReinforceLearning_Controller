@@ -197,9 +197,13 @@ class UniTreeGo1Env(AntEnv):
                                boundary=self._healthy_z_target-self._healthy_z_range[0],
                                boundary_value=0.1)
         
-        return (yaw_decay * pitch_decay * z_decay * 
-                max(hip_joints_decay, (1 - self.stage / Stage.late)) * 
-                self._posture_reward_weight)
+        feet_z = [self.data.geom_xpos[foot_id][2] for foot_id in self._foot_ids]
+        feet_z_decaies = [clip_exp_decay(foot_z) for foot_z in feet_z]
+        feet_z_decay = np.prod(feet_z_decaies)
+        
+        return self._posture_reward_weight * (
+            yaw_decay * pitch_decay * z_decay * hip_joints_decay + 
+            (self.stage < Stage.mid) * feet_z_decay)
 
 # endregion
 
@@ -207,6 +211,13 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def is_alive(self):
+        for c in self.data.contact:
+            illegal_touching = (
+                (c.geom1 not in self._foot_ids and c.geom2 == self._floor_id) or
+                (c.geom1 == self._floor_id and c.geom2 not in self._foot_ids))
+            if illegal_touching:
+                return False
+        
         state = self.state_vector()
         z_min, z_max = self._healthy_z_range
         pitch_min, pitch_max = self._healthy_pitch_range
@@ -219,7 +230,7 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def healthy_reward(self):
-        return self.is_alive * self._healthy_reward_weight
+        return (self._healthy_reward_weight * self.is_alive)
     
 # endregion
 
@@ -270,9 +281,8 @@ class UniTreeGo1Env(AntEnv):
         feet_filted_vx_mse = forward_info["feet_filted_vx_mse"]
         feet_vx_decay = clip_exp_decay(feet_filted_vx_mse, alpha=self._gait_reward_alpha)
 
-        return (_forward_reward * self._forward_reward_weight *
-                max(state_loop_gain, 1 - self.stage / Stage.late) *
-                max(feet_vx_decay, 1 - max(self.stage - Stage.mid, 0)))
+        return self._forward_reward_weight * (
+            (self.stage >= Stage.mid) * (_forward_reward + feet_vx_decay))
     
 # endregion
 
@@ -348,8 +358,9 @@ class UniTreeGo1Env(AntEnv):
                                         alpha=self._state_reward_alpha,
                                         x_shift=self._state_reward_hold)
         # return (bonus + state_decay) * self._state_reward_weight
-        return (self._state_reward_weight *
-                state_decay * max(self.stage - Stage.mid, 0))
+        return (self._state_reward_weight * 
+                ((self.stage < Stage.mid) * (state_info["state"] in {State.s0, State.s1, State.s5, State.s9}) + 
+                 (self.stage >= Stage.mid) * (state_decay * max(state_loop_gain, (-self.stage + 2 * Stage.mid)))))
 
 # endregion
 
