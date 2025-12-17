@@ -32,6 +32,7 @@ class CustomCheckpointCallback(BaseCallback):
         self.checkpoints_path = checkpoints_path
         self.save_vecnormalize = save_vecnormalize
         self.save_count = 1
+        self.last_save_step = None
 
     def _on_training_start(self)  -> bool:
         self.save_freq = (-self.save_freq % self.model.n_envs) + self.save_freq
@@ -42,6 +43,8 @@ class CustomCheckpointCallback(BaseCallback):
         return f"{self.save_name}_{self.save_count}"
 
     def _save_checkpoint(self) -> bool:
+        if self.last_save_step == self.n_calls * self.model.n_envs:
+            return True
         lr_schedule_tmp = self.model.lr_schedule
         lr_tmp = self.model.lr_schedule(self.model._current_progress_remaining)
         self.model.learning_rate = lr_tmp
@@ -89,6 +92,7 @@ class CustomCheckpointCallback(BaseCallback):
             print(f"Saving training stage to {stage_path}")
 
         print()
+        self.last_save_step = self.n_calls * self.model.n_envs
         self.model.lr_schedule = lr_schedule_tmp
         self.note = ""
         self.save_count += 1

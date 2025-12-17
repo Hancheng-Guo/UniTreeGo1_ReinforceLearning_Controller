@@ -5,45 +5,14 @@ import numpy as np
 import os
 from enum import IntEnum
 from src.utils.decays import StepGain
+from torch.utils.tensorboard import SummaryWriter
 
-# region | Reward Scheduler
 
 class Stage(IntEnum):
     early = 0
     mid = 1
     late = 2
-
-# class UniTreeGo1StageScheduler:
-#     def __init__(self, env,
-#                  max_winlen: int = 50):
-#         self.env = env
-#         self.stage = None
-#         self.max_winlen = max_winlen
-#         self.x_velocities = deque(maxlen=self.max_winlen)
-#         self.in_state_loop = deque(maxlen=self.max_winlen)
-#         self.x_velocities_fun = StepGain({1.:Stage.early,
-#                                           2.:Stage.mid,
-#                                           3.:Stage.late})
-#         self.in_state_loop_fun = StepGain({0.2:Stage.early,
-#                                            0.6:Stage.late})
-
-#     def __call__(self):
-#         return self.stage
-
-#     def reset(self):
-#         self.stage = float(Stage.early)
-#         self.x_velocities.clear()
-#         self.in_state_loop.clear()
-    
-#     def update(self):
-#         self.x_velocities.append(self.env.forward_info["x_velocity"])
-#         self.in_state_loop.append(self.env.state_info["state_loop_time"] >= 0)
-
-#         stage_x_velocities = self.x_velocities_fun(np.sum(self.x_velocities)/self.max_winlen)
-#         stage_in_state_loop = self.in_state_loop_fun(np.sum(self.in_state_loop)/self.max_winlen)
-
-#         self.stage = min(stage_x_velocities, stage_in_state_loop)
-#         return self.stage
+    done = 3
     
 class StageScheduleCallback(BaseCallback):
     def __init__(self, 
@@ -54,18 +23,26 @@ class StageScheduleCallback(BaseCallback):
         self.base_stage = base_stage
         self.stage = None
         self.winlen = None
+
+        self.state_loop_min = None
+        self.state_loop_tmp = None
         self.x_velocities = None
-        self.in_state_loop = None
-        self.x_velocities_fun = StepGain({1.:Stage.early,
-                                          2.:Stage.mid,
-                                          3.:Stage.late})
-        self.in_state_loop_fun = StepGain({0.2:Stage.early,
-                                           0.6:Stage.late})
+        self.alive_fun = StepGain({0.:Stage.early,
+                                   150.:Stage.mid,
+                                   500.:Stage.late,
+                                   800.:Stage.done})
+        self.in_state_loop_fun = StepGain({-1.:Stage.mid,
+                                           0.6:Stage.late,
+                                           0.7:Stage.done})
+        self.x_velocities_fun = StepGain({-5.0:Stage.mid,
+                                          3.0:Stage.late,
+                                          5.0:Stage.done})
 
     def _on_training_start(self):
         self.winlen = self.model.n_steps * self.model.n_envs
-        self.x_velocities = deque(maxlen=self.winlen)
-        self.in_state_loop = deque(maxlen=self.winlen)
+        self.x_velocities = [0 for _ in range(self.model.n_envs)]
+        self.state_loop_min = [np.inf for _ in range(self.model.n_envs)]
+        self.state_loop_tmp = [-1 for _ in range(self.model.n_envs)]
         if self.base_stage is not None:
             self.stage = np.load(self.base_stage)
         else:
@@ -78,17 +55,22 @@ class StageScheduleCallback(BaseCallback):
         return True
     
     def _on_step(self):
-        for env in self.model.env.venv.envs:
-            self.x_velocities.append(env.env.env.env.env.forward_info["x_velocity"])
-            self.in_state_loop.append(env.env.env.env.env.state_info["state_loop_time"] >= 0)
+        for i, env in enumerate(self.model.env.venv.envs):
+            self.x_velocities[i] += env.env.env.env.env.forward_info["x_velocity"]
+            if env.env.env.env.env.state_info["state_loop_time"] != (self.state_loop_tmp[i] + 1):
+                self.state_loop_min[i] = min(self.state_loop_min[i], self.state_loop_tmp[i])
+            self.state_loop_tmp[i] = env.env.env.env.env.state_info["state_loop_time"]
+            
         return True
     
     def _on_rollout_end(self):
-        # if len(self.model.ep_info_buffer) > 0 and len(self.model.ep_info_buffer[0]) > 0:
-        #     ep_rew_mean = safe_mean([ep_info["r"] for ep_info in self.model.ep_info_buffer])
-        #     ep_len_mean = safe_mean([ep_info["l"] for ep_info in self.model.ep_info_buffer])
-        stage_x_velocities = self.x_velocities_fun(np.sum(self.x_velocities)/self.winlen)
-        stage_in_state_loop = self.in_state_loop_fun(np.sum(self.in_state_loop)/self.winlen)
 
-        self.stage = max(min(stage_x_velocities, stage_in_state_loop), self.stage)
+        has_ep_mean = len(self.model.ep_info_buffer) > 0 and len(self.model.ep_info_buffer[0]) > 0
+        ep_len_mean = safe_mean([ep_info["l"] for ep_info in self.model.ep_info_buffer]) if has_ep_mean else 0
+        # ep_rew_mean = safe_mean([ep_info["r"] for ep_info in self.model.ep_info_buffer]) if has_ep_mean else 0
+        stage_alive = self.alive_fun(ep_len_mean)
+        stage_pct_state_loop = self.in_state_loop_fun(min(self.state_loop_min) / self.model.n_steps)
+        stage_x_velocity = self.x_velocities_fun(np.mean(self.x_velocities) / self.model.n_steps)
+
+        self.stage = max(min(stage_x_velocity, stage_pct_state_loop, stage_alive), self.stage)
         return True

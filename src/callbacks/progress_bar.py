@@ -9,8 +9,11 @@ class ProgressBarCallback(BaseCallback):
         self.current_step = None
 
     def _on_training_start(self) -> bool:
+        rollout_steps = self.model.n_steps * self.model.n_envs
+        rollout_times_total = (self.model._total_timesteps + rollout_steps - 1) // rollout_steps
         self.bar = ProgressBar(total=self.model.n_steps * self.model.n_envs,
-                               custom_str="Rollout")
+                               custom_str="Rollout",
+                               call_times_total=rollout_times_total)
         return True
 
     def _on_rollout_start(self) -> bool:
