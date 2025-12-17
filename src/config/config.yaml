@@ -20,7 +20,7 @@ train:
   ctrl_cost_weight: 0.05
   contact_cost_weight: 5.e-4
 
-  checkpoint_freq: 200000
+  checkpoint_freq: 204800
   custom_log_freq: 2048
 
 demo:
@@ -50,7 +50,7 @@ algorithm:
   gae_lambda: 0.95
   device: "cpu"
   verbose: 1
-  total_timesteps: 2000000
+  total_timesteps: 2048000
 
 path:
   output: ".\\output\\"
