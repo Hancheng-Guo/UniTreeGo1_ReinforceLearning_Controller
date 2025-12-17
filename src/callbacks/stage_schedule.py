@@ -56,10 +56,10 @@ class StageScheduleCallback(BaseCallback):
     
     def _on_step(self):
         for i, env in enumerate(self.model.env.venv.envs):
-            self.x_velocities[i] += env.env.env.env.env.forward_info["x_velocity"]
-            if env.env.env.env.env.state_info["state_loop_time"] != (self.state_loop_tmp[i] + 1):
+            self.x_velocities[i] += env.env.env.env.env.reward.forward_info["x_velocity"]
+            if env.env.env.env.env.reward.state_info["state_loop_time"] != (self.state_loop_tmp[i] + 1):
                 self.state_loop_min[i] = min(self.state_loop_min[i], self.state_loop_tmp[i])
-            self.state_loop_tmp[i] = env.env.env.env.env.state_info["state_loop_time"]
+            self.state_loop_tmp[i] = env.env.env.env.env.reward.state_info["state_loop_time"]
             
         return True
     

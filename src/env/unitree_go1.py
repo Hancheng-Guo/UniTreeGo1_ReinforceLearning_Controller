@@ -18,70 +18,61 @@ hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 class UniTreeGo1Env(AntEnv):
     def __init__(
             self,
+            xml_file: str = "ant.xml",
+            frame_skip: int = 5,
+            main_body: int | str = 1,
+            reset_noise_scale: float = 0.1,
+            exclude_current_positions_from_observation: bool = False,
+            include_cfrc_ext_in_observation: bool = True,
+
             reset_state: str = "home",
-            healthy_pitch_range: tuple[float, float] = (0.2, 1.0),
-            healthy_z_range: tuple[float, float] = (0.15, 0.6),
-            healthy_z_target: float = 0.27,
-            healthy_reward_weight: float = 1.,
-            posture_reward_weight: float = 1.,
-            forward_reward_weight: float = 1.,
-            gait_reward_alpha: float = 100.,
-            state_reward_weight: float = 1.,
-            state_reward_alpha: float = 0.2,
-            state_reward_hold: float = 5,
-            ctrl_cost_weight: float = 0.05,
-            contact_cost_weight: float = 5.e-4,
             render_mode: str = None,
             plt_n_lines: int = 1,
             plt_x_range: int = 200,
+
             **kwargs):
-        super().__init__(**kwargs)
+
+        super().__init__(xml_file=xml_file,
+                         frame_skip=frame_skip,
+                         main_body=main_body,
+                         reset_noise_scale=reset_noise_scale,
+                         include_cfrc_ext_in_observation=include_cfrc_ext_in_observation,
+                         exclude_current_positions_from_observation=exclude_current_positions_from_observation,)
         self._reset_state = reset_state
         self.stage = None # update in callback
+        self.action = None
+        self.action_old = None
+        self.data_old = None
+        self.reward = UniTreeGo1Reward(self, reward_config=None, **kwargs["reward_config"])
         # for demo
         self.render_mode = render_mode
-        if render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+        self._init_render(plt_n_lines, plt_x_range)
+        self.mjc_img = None
+        self.plt_img = None
+        # for obs
+        self._init_customize_obs()
+        self._hip_joint_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, hip_joint)
+                               for hip_joint in hip_joints]
+        self._hip_joint_addrs = [self.model.jnt_qposadr[hip_joint_id]
+                                 for hip_joint_id in self._hip_joint_ids]
+        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
+                          for foot in feet]
+        self._floor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
+
+    def _init_render(self, plt_n_lines, plt_x_range):
+        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
             self.plt_render = PltRenderer(self.render_mode,
                                           plt_n_lines=plt_n_lines,
                                           plt_x_range=plt_x_range)
             self.plt_render.reset()
-        self.mjc_img = None
-        self.plt_img = None
-        # for healthy_reward
-        self._healthy_reward_weight = healthy_reward_weight
-        self._healthy_pitch_range = healthy_pitch_range
-        self._healthy_z_range = healthy_z_range
-        self._healthy_z_target = healthy_z_target
-        self._hip_joint_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, hip_joint)
-                         for hip_joint in hip_joints]
-        self._hip_joint_addrs = [self.model.jnt_qposadr[hip_joint_id]
-                                 for hip_joint_id in self._hip_joint_ids]
-        # for posture_reward
-        self._posture_reward_weight = posture_reward_weight
-        # for forward_reward
-        self._forward_reward_weight = forward_reward_weight
-        self._gait_reward_alpha = gait_reward_alpha
-        # for state_reward
-        self._state_reward_weight = state_reward_weight
-        self._state_reward_alpha = state_reward_alpha
-        self._state_reward_hold = state_reward_hold
-        self.fsm = UniTreeGo1FSM()
-        # for ctrl_cost
-        self._ctrl_cost_weight = ctrl_cost_weight
-        # for contact_cost
-        self._contact_cost_weight = contact_cost_weight
-        self._total_mass = self.model.body_mass.sum()
-        self._contact_force_scale = self._total_mass * np.linalg.norm(self.model.opt.gravity)
-        # for adding foot_landed/airborne_time to obs
-        self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
-                          for foot in feet]
-        self._floor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
+    
+    def _init_customize_obs(self):
         self._foot_landed_time = np.zeros(len(feet))
         self._foot_airborne_time = np.zeros(len(feet))
         obs_size = self.observation_space.shape[0] + 2 * len(feet)
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
-        self.observation_structure["foot_landed_time"] = len(self._foot_landed_time)
-        self.observation_structure["foot_airborne_time"] = len(self._foot_airborne_time)
+        self.observation_structure["foot_landed_time"] = len(feet)
+        self.observation_structure["foot_airborne_time"] = len(feet)
 
     def render(self, render_mode=None):
         if render_mode:
@@ -89,7 +80,7 @@ class UniTreeGo1Env(AntEnv):
         return self.mujoco_renderer.render(self.render_mode)
     
     def reset(self, *, seed=None, options=None):
-        self.fsm.reset()
+        self.reward.reset()
         options = options or {}
         options["init_key"] = self._reset_state
         ob, info = super().reset(seed=seed, options=options)
@@ -99,16 +90,19 @@ class UniTreeGo1Env(AntEnv):
         return ob, info
     
     def step(self, action):
-        self.data_old =  copy.deepcopy(self.data)
+        self.action_old = copy.deepcopy(self.action)
+        self.action = action
+        self.data_old = copy.deepcopy(self.data)
         self.do_simulation(action, self.frame_skip)
 
         observation = self._get_obs()
-        reward, reward_info = self._get_rew(action)
-        terminated = (not self.is_alive) and self._terminate_when_unhealthy
+        reward, reward_info = self._get_rew()
+        terminated = (not self.reward.is_alive) and self._terminate_when_unhealthy
         info = {
             "x_position": self.data.qpos[0],
             "y_position": self.data.qpos[1],
             "distance_from_origin": np.linalg.norm(self.data.qpos[0:2], ord=2),
+            "stage": self.stage,
             **reward_info,
         }
 
@@ -123,23 +117,133 @@ class UniTreeGo1Env(AntEnv):
     
     def _get_obs(self):
         obs = super()._get_obs()
-        landed_obs, airborne_obs = self.foot_obs
+        landed_obs, airborne_obs = self._get_foot_obs
         return np.concatenate((obs, landed_obs.flatten(), airborne_obs.flatten()))
     
-    def _get_rew(self, action):
+    def _get_rew(self):
+        reward, reward_info = self.reward()
+        return reward, reward_info
+    
+    @property
+    def _get_foot_obs(self):
+        for i, is_touching in enumerate(self._are_feet_touching_ground):
+            self._foot_airborne_time[i] = 0 if is_touching else self._foot_airborne_time[i] + 1
+            self._foot_landed_time[i] = self._foot_landed_time[i] + 1 if is_touching else 0
+        return self._foot_landed_time, self._foot_airborne_time
+    
+    @property
+    def _are_feet_touching_ground(self):
+        are_touching = []
+        for foot_id in self._foot_ids:
+            is_touching = False
+            for c in self.data.contact:
+                is_touching = ((c.geom1 == foot_id and c.geom2 == self._floor_id) or
+                               (c.geom1 == self._floor_id and c.geom2 == foot_id))
+                if is_touching:
+                    break
+            are_touching.append(is_touching)
+        return are_touching
+
+# region | Reward
+
+class NewReward():
+    def __init__(self, env, fun, weight, stage_range=[-np.inf, np.inf]):
+        self.env = env
+        self.fun = fun
+        self.weight = weight
+        self.stage_range = stage_range
+        
+    def __call__(self) -> float:
+        if (self.env.stage < self.stage_range[0]): return 0
+        if (self.env.stage >= self.stage_range[-1]): return 0
+        return self.weight * self.fun(self.env)
+
+
+class UniTreeGo1Reward():
+    def __init__(self, env,
+            reward_config,
+            healthy_pitch_range: list[float, float] = [-0.5, 0.5],
+            healthy_z_range: list[float, float] = [0.18, 0.7],
+            healthy_z_target: float = 0.27,
+            healthy_reward_weight: float = 1.,
+            posture_reward_weight: float = 1.,
+            forward_reward_weight: float = 1.,
+            gait_reward_alpha: float = 100.,
+            state_reward_weight: float = 1.,
+            state_reward_alpha: float = 0.2,
+            state_reward_hold: float = 5,
+            ctrl_cost_weight: float = 0.05,
+            contact_cost_weight: float = 5.e-4,
+            contact_force_range: list[float, float] = [-1.0, 1.0],
+            ):
+        self.env = env
+        self.rewards = None
+        # self._init_rewards(**reward_config)
+
+
+
+
+
+
+
+
+
+        # for healthy_reward
+        self._healthy_reward_weight = healthy_reward_weight
+        self._healthy_pitch_range = healthy_pitch_range
+        self._healthy_z_range = healthy_z_range
+        self._healthy_z_target = healthy_z_target
+        
+        # for posture_reward
+        self._posture_reward_weight = posture_reward_weight
+        # for forward_reward
+        self._forward_reward_weight = forward_reward_weight
+        self._gait_reward_alpha = gait_reward_alpha
+        # for state_reward
+        self._state_reward_weight = state_reward_weight
+        self._state_reward_alpha = state_reward_alpha
+        self._state_reward_hold = state_reward_hold
+        self.fsm = UniTreeGo1FSM()
+        # for ctrl_cost
+        self._ctrl_cost_weight = ctrl_cost_weight
+        # for contact_cost
+        self._contact_cost_weight = contact_cost_weight
+        self._total_mass = self.env.model.body_mass.sum()
+        self._contact_force_scale = self._total_mass * np.linalg.norm(self.env.model.opt.gravity)
+        self._contact_force_range = contact_force_range
+
+        
+    def _init_rewards(self,
+            ):
+        
+        self.rewards = [
+
+        ]
+
+
+    def __call__(self):
+        # reward = 0
+        # info = {}
+        # for reward_item in self.rewards:
+        #     r, i = reward_item()
+        #     reward += r
+        #     info.update(i)
+
+        # return reward, info
+
+
         forward_reward = self.forward_reward
         healthy_reward = self.healthy_reward
         state_reward = self.state_reward
         posture_reward = self.posture_reward
         rewards = forward_reward + healthy_reward + state_reward + posture_reward
 
-        ctrl_cost = self.control_cost(action)
+        ctrl_cost = self.control_cost(self.env.action)
         contact_cost = self.contact_cost
         costs = ctrl_cost + contact_cost
 
         reward = rewards - costs
         reward_info = {
-            "stage": self.stage,
             "reward_healthy": healthy_reward,
             "reward_forward": forward_reward,
             "reward_state": state_reward,
@@ -152,14 +256,35 @@ class UniTreeGo1Env(AntEnv):
             **self.posture_info,
             **self.contact_info,
         }
+
         return reward, reward_info
+    
+    def reset(self):
+        self.fsm.reset()
+        return True
+
+
+
+
+
+
+
+
+
+
+
+
+
+    def control_cost(self, action):
+        control_cost = self._ctrl_cost_weight * np.sum(np.square(action))
+        return control_cost
 
 # region | Posture Reward
 
     @property
     def _get_rotation_matrix(self):
         mat = np.zeros((9, 1)) # R00 R01 R02 R10 R11 R12 R20 R21 R22
-        mujoco.mju_quat2Mat(mat, self.state_vector()[3:7]) # Convert quaternion to 3D rotation matrix
+        mujoco.mju_quat2Mat(mat, self.env.state_vector()[3:7]) # Convert quaternion to 3D rotation matrix
         return mat
 
     @property
@@ -185,25 +310,25 @@ class UniTreeGo1Env(AntEnv):
                                    boundary_value=0.5)
         
         hip_joints_decay = 0
-        for i, hip_joint_addr in enumerate(self._hip_joint_addrs):
-            hip_joints_pos = float(self.data.qpos[hip_joint_addr])
+        for i, hip_joint_addr in enumerate(self.env._hip_joint_addrs):
+            hip_joints_pos = float(self.env.data.qpos[hip_joint_addr])
             hip_joints_decay += radial_decay(
                 hip_joints_pos,
-                boundary=self.model.jnt_range[self._hip_joint_ids[i]])
-        hip_joints_decay /= len(self._hip_joint_addrs)
+                boundary=self.env.model.jnt_range[self.env._hip_joint_ids[i]])
+        hip_joints_decay /= len(self.env._hip_joint_addrs)
         
-        z_decay = radial_decay(self.state_vector()[2],
+        z_decay = radial_decay(self.env.state_vector()[2],
                                center=self._healthy_z_target,
                                boundary=self._healthy_z_target-self._healthy_z_range[0],
                                boundary_value=0.1)
         
-        feet_z = [self.data.geom_xpos[foot_id][2] for foot_id in self._foot_ids]
+        feet_z = [self.env.data.geom_xpos[foot_id][2] for foot_id in self.env._foot_ids]
         feet_z_decaies = [clip_exp_decay(foot_z) for foot_z in feet_z]
         feet_z_decay = np.prod(feet_z_decaies)
         
         return self._posture_reward_weight * (
             yaw_decay * pitch_decay * z_decay * hip_joints_decay + 
-            (self.stage < Stage.mid) * feet_z_decay)
+            (self.env.stage < Stage.mid) * feet_z_decay)
 
 # endregion
 
@@ -211,14 +336,14 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def is_alive(self):
-        for c in self.data.contact:
+        for c in self.env.data.contact:
             illegal_touching = (
-                (c.geom1 not in self._foot_ids and c.geom2 == self._floor_id) or
-                (c.geom1 == self._floor_id and c.geom2 not in self._foot_ids))
+                (c.geom1 not in self.env._foot_ids and c.geom2 == self.env._floor_id) or
+                (c.geom1 == self.env._floor_id and c.geom2 not in self.env._foot_ids))
             if illegal_touching:
                 return False
         
-        state = self.state_vector()
+        state = self.env.state_vector()
         z_min, z_max = self._healthy_z_range
         pitch_min, pitch_max = self._healthy_pitch_range
         is_alive = (
@@ -238,19 +363,19 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def forward_info(self):
-        xy_position_before = self.data_old.body(self._main_body).xpos[:2].copy()
-        xy_position_after = self.data.body(self._main_body).xpos[:2].copy()
-        xy_velocity = (xy_position_after - xy_position_before) / self.dt
+        xy_position_before = self.env.data_old.body(self.env._main_body).xpos[:2].copy()
+        xy_position_after = self.env.data.body(self.env._main_body).xpos[:2].copy()
+        xy_velocity = (xy_position_after - xy_position_before) / self.env.dt
         x_velocity, y_velocity = xy_velocity
 
         mat = self._get_rotation_matrix
         body_x = np.array([mat[0], mat[3], mat[6]]).reshape(-1)
         body_x = body_x / np.linalg.norm(body_x)
 
-        feet_dpos = self.data.geom_xpos[self._foot_ids] - self.data_old.geom_xpos[self._foot_ids]
+        feet_dpos = self.env.data.geom_xpos[self.env._foot_ids] - self.env.data_old.geom_xpos[self.env._foot_ids]
         feet_dx = np.dot(body_x, feet_dpos.T)
-        feet_vx = feet_dx / self.dt
-        foot_filted_vx = feet_vx[self._are_feet_touching_ground]
+        feet_vx = feet_dx / self.env.dt
+        foot_filted_vx = feet_vx[self.env._are_feet_touching_ground]
         if foot_filted_vx.size >= 2:
             feet_filted_vx_mse = np.mean((foot_filted_vx - np.mean(foot_filted_vx))**2)
         else:
@@ -282,7 +407,7 @@ class UniTreeGo1Env(AntEnv):
         feet_vx_decay = clip_exp_decay(feet_filted_vx_mse, alpha=self._gait_reward_alpha)
 
         return self._forward_reward_weight * (
-            (self.stage >= Stage.mid) * (_forward_reward + feet_vx_decay))
+            (self.env.stage >= Stage.mid) * (_forward_reward + feet_vx_decay))
     
 # endregion
 
@@ -302,7 +427,7 @@ class UniTreeGo1Env(AntEnv):
     
     @property
     def contact_forces(self):
-        raw_contact_forces = self.data.cfrc_ext     
+        raw_contact_forces = self.env.data.cfrc_ext     
         return raw_contact_forces
     
     @property
@@ -314,29 +439,13 @@ class UniTreeGo1Env(AntEnv):
 
 # region | State Reward
 
-    @property
-    def _are_feet_touching_ground(self):
-        are_touching = []
-        for foot_id in self._foot_ids:
-            is_touching = False
-            for c in self.data.contact:
-                is_touching = ((c.geom1 == foot_id and c.geom2 == self._floor_id) or
-                               (c.geom1 == self._floor_id and c.geom2 == foot_id))
-                if is_touching:
-                    break
-            are_touching.append(is_touching)
-        return are_touching
+    
 
-    @property
-    def foot_obs(self):
-        for i, is_touching in enumerate(self._are_feet_touching_ground):
-            self._foot_airborne_time[i] = 0 if is_touching else self._foot_airborne_time[i] + 1
-            self._foot_landed_time[i] = self._foot_landed_time[i] + 1 if is_touching else 0
-        return self._foot_landed_time, self._foot_airborne_time
+    
     
     @property
     def state_info(self):
-        bonus, state_reward_time, state_loop_time = self.fsm.update(self.foot_obs)
+        bonus, state_reward_time, state_loop_time = self.fsm.update(self.env._are_feet_touching_ground)
         state_info = {
             "state": self.fsm.state,
             "bonus": bonus,
@@ -359,8 +468,8 @@ class UniTreeGo1Env(AntEnv):
                                         x_shift=self._state_reward_hold)
         # return (bonus + state_decay) * self._state_reward_weight
         return (self._state_reward_weight * 
-                ((self.stage < Stage.mid) * (state_info["state"] in {State.s0, State.s1, State.s5, State.s9}) + 
-                 (self.stage >= Stage.mid) * (state_decay * max(state_loop_gain, (-self.stage + 2 * Stage.mid)))))
+                ((self.env.stage < Stage.mid) * (state_info["state"] in {State.s0, State.s1, State.s5, State.s9}) + 
+                 (self.env.stage >= Stage.mid) * (state_decay * max(state_loop_gain, (-self.env.stage + 2 * Stage.mid)))))
 
 # endregion
 
@@ -403,12 +512,11 @@ class UniTreeGo1FSM:
             State.x2: self.x2,
         }
 
-    def check(self, obs):
+    def check(self, are_feet_touching_ground):
         # only return s2-s4, s6-s9, x0-x2
         # s9 include s1 and s5
         # x0 include s0
-        landed_obs, _ = obs # ["FR_calf", "FL_calf", "RR_calf", "RL_calf"]
-        landed_count = sum(1 for foot_landed_time in landed_obs if foot_landed_time > 0)
+        landed_count = sum(are_feet_touching_ground)
         if landed_count == 0:
             return State.x0
         if landed_count == 1:
@@ -416,19 +524,22 @@ class UniTreeGo1FSM:
         if landed_count == 4:
             return State.s9
         if landed_count == 3:
-            if landed_obs[0] == 0:
+            if not are_feet_touching_ground[0]:
                 return State.s2
-            if landed_obs[1] == 0:
+            if not are_feet_touching_ground[1]:
                 return State.s6
-            if landed_obs[2] == 0:
+            if not are_feet_touching_ground[2]:
                 return State.s8
-            return State.s4 # landed_obs[3] == 0
+            return State.s4 # are_feet_touching_ground[3] == 0
         # landed_count == 2
-        if (landed_obs[0] + landed_obs[1] == 0) or (landed_obs[2] + landed_obs[3] == 0) or (landed_obs[0] + landed_obs[2] == 0) or (landed_obs[1] + landed_obs[3] == 0):
-            return State.x2
-        if (landed_obs[0] + landed_obs[3] == 0):
+        if ((are_feet_touching_ground[0] + are_feet_touching_ground[1] == 0) or
+            (are_feet_touching_ground[2] + are_feet_touching_ground[3] == 0) or
+            (are_feet_touching_ground[0] + are_feet_touching_ground[2] == 0) or
+            (are_feet_touching_ground[1] + are_feet_touching_ground[3] == 0)):
+                return State.x2
+        if (are_feet_touching_ground[0] + are_feet_touching_ground[3] == 0):
             return State.s3
-        return State.s7 # landed_obs[1] + landed_obs[2] == 0
+        return State.s7 # are_feet_touching_ground[1] + are_feet_touching_ground[2] == 0
 
     def update(self, obs):
         target_state = self.check(obs)
@@ -589,5 +700,7 @@ class UniTreeGo1FSM:
             bonus = 0
         self._state_duration = self._state_duration + 1 if self.state == State.x2 else 0
         return bonus, has_reward
+
+# endregion
 
 # endregion
