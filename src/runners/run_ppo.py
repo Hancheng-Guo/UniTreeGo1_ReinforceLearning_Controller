@@ -203,7 +203,7 @@ def ppo_train(base_name=None, config_inheritance=False, note_skip=False):
 def ppo_test(test_name=None, n_tests=3, max_steps=1000, mode=""):
 
     test_name, test_dir = check_base_name(test_name)
-    bar = ProgressBar(total=max_steps, custom_str="Darwing")
+    bar = ProgressBar(total=max_steps, custom_str="Darwing", call_times_total=n_tests)
 
     if test_name:
         test_env = make_env("demo", config=CONFIG)
@@ -216,6 +216,7 @@ def ppo_test(test_name=None, n_tests=3, max_steps=1000, mode=""):
 
         test_saver = TestSaver(test_env, test_name, test_dir)
         for i in range(n_tests):
+            bar.reset()
             for j in range(max_steps):
                 bar.update(j + 1)
                 action, _ = model.predict(obs, deterministic=True)
