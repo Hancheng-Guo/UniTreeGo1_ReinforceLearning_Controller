@@ -62,6 +62,8 @@ def get_algorithm_kwargs(base_name, base_dir, config_inheritance):
                                            "clip_range", "gamma", "gae_lambda",
                                            "device", "verbose", "vf_coef",
                                            "learning_rate", "policy", "policy_kwargs"])
+    activation_fn = algorithm_kwargs["policy_kwargs"].get("activation_fn", "")
+    algorithm_kwargs["policy_kwargs"]["activation_fn"] = nn.ELU if activation_fn == "ELU" else nn.Tanh
     return algorithm_kwargs
 
 def load_model(env, base_name, base_dir, algorithm_kwargs={}, **kwargs):
