@@ -51,6 +51,11 @@ reward:
 
 algorithm:
   policy: "MlpPolicy"
+  policy_kwargs:
+    activation_fn: "ELU"
+    net_arch:
+      pi: [512, 256, 128]
+      vf: [512, 256, 128]
   n_steps: 512
   batch_size: 64
   n_epochs: 10
