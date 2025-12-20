@@ -7,13 +7,16 @@ from PIL import Image
 def plt_select_kwargs(state, info):
     selected_kwargs = {
         "x_velocity": {"value": info.get("x_velocity"), "needs_unwrap": False},
-        "y_pitch": {"value": info.get("pitch"), "needs_unwrap": True},
-        "z_position": {"value": state[2:3], "needs_unwrap": False},
-        "state": {"value": info.get("state"), "needs_unwrap": False},
-        "reward": {"value": info.get("reward_total"), "needs_unwrap": False},
-        "reward_forward": {"value": info.get("reward_forward"), "needs_unwrap": False},
-        "reward_posture": {"value": info.get("reward_posture"), "needs_unwrap": False},
-        "reward_state": {"value": info.get("reward_state"), "needs_unwrap": False},
+        "x_velocity_target": {"value": info.get("x_velocity_target"), "needs_unwrap": False},
+        "y_velocity": {"value": info.get("y_velocity"), "needs_unwrap": False},
+        "y_velocity_target": {"value": info.get("y_velocity_target"), "needs_unwrap": False},
+        "x_velocity_reward": {"value": info.get("x_velocity_reward"), "needs_unwrap": False},
+        "y_velocity_reward": {"value": info.get("y_velocity_reward"), "needs_unwrap": False},
+        "z_velocity_reward": {"value": info.get("z_velocity_reward"), "needs_unwrap": False},
+        "z_position_reward": {"value": info.get("z_position_reward"), "needs_unwrap": False},
+        "xy_angular_velocity_reward": {"value": info.get("xy_angular_velocity_reward"), "needs_unwrap": False},
+        "xy_angular_reward": {"value": info.get("xy_angular_reward"), "needs_unwrap": False},
+        "gait_loop_reward": {"value": info.get("gait_loop_reward"), "needs_unwrap": False},
         }
     return selected_kwargs
 

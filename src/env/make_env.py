@@ -10,7 +10,7 @@ register(
     entry_point="src.env.unitree_go1:UniTreeGo1Env",
 )
 
-def make_gym_env(config, env_mode="train", *args, **kwargs):
+def make_gym_env(config, *args, **kwargs):
 
     kwargs["id"] = "MyUniTreeGo1"
     kwargs["main_body"] = "trunk"
@@ -19,7 +19,6 @@ def make_gym_env(config, env_mode="train", *args, **kwargs):
 
     kwargs["xml_file"] = config["path"]["model_dir_modified"] + "scene.xml"
     kwargs["frame_skip"] = config["train"]["frame_skip"]
-    kwargs["reset_state"] = config["train"]["reset_state"]
     kwargs["reset_noise_scale"] = config["train"]["reset_noise_scale"]
     kwargs["max_episode_steps"] = config["train"]["max_episode_steps"]
 
@@ -31,6 +30,7 @@ def make_gym_env(config, env_mode="train", *args, **kwargs):
                             camera_pos=config["demo"]["camera_pos"],
                             camera_xyaxes=config["demo"]["camera_xyaxes"])
 
+    kwargs["control_config"] = config["control"]
     kwargs["reward_config"] = config["reward"]
 
     return gym.make(*args, **kwargs)
@@ -42,7 +42,7 @@ def make_train_env(config, *args, **kwargs):
 
 def make_demo_env(config, *args, **kwargs):
     env_mode = "train" if config["is"]["param_shared"] else "demo"
-    return make_gym_env(config, env_mode=env_mode,
+    return make_gym_env(config,
                         render_mode=config["demo"]["demo_type"],
                         width=config["demo"]["mjc_render_width"],
                         height=config["demo"]["mjc_render_height"],

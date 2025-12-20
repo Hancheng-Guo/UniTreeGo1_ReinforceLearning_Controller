@@ -3,8 +3,8 @@ train:
   frame_skip: 5
   reset_noise_scale: 0.1
   max_episode_steps: 1000
-  reset_state: "home"
-  checkpoint_freq: 204800
+  total_timesteps: 20480000
+  checkpoint_freq: 2048000
   custom_log_freq: 2048
 
 demo:
@@ -16,34 +16,51 @@ demo:
   plt_n_lines: 1
   plt_x_range: 100
 
+control:
+  control_type: "generate"
+  generator_theta: 1.0
+  generator_smooth_order: 5
+  generator_schedule: [
+    {"name": "robot_x_velocity",    "amp": [0.0, 1.0, 3.0, 4.0, 5.0],  "avg": [0.0, 1.0, 3.0, 4.0, 5.0]},
+    {"name": "robot_y_velocity",    "amp": [0.0, 0.0, 0.2, 0.5, 1.0],  "avg": [0.0, 0.0, 0.2, 0.5, 1.0]},
+    {"name": "z_angular_velocity",  "amp": [0.0, 0.0, 0.2, 0.5, 1.0],  "avg": [0.0, 0.0, 0.0, 0.0, 0.0]},
+  ]
+
 reward:
-  healthy_z_range: [0.18, 0.7]
-  healthy_z_target: 0.27
-  healthy_pitch_range: [-0.785, 0.785]
-  healthy_reward_weight: 1.
-  posture_reward_weight: 1.
-  forward_reward_weight: 1.
-  gait_reward_alpha: 100.
-  state_reward_weight: 1.
-  state_reward_alpha: 0.1
-  state_reward_hold: 5
-  ctrl_cost_weight: 0.05
-  contact_cost_weight: 5.e-4
-  contact_force_range: [-1.0, 1.0]
+  alive_weight: 1.0
+  illegal_contact_weight: -1.0
+  robot_xy_velocity_weight: 1.0
+  z_angular_velocity_weight: 1.0
+  z_velocity_weight: -1.0
+  z_position_weight: -10.0
+  xy_angular_velocity_weight: -0.1
+  xy_angular_weight: -0.1
+  action_change_weight: -0.1
+  hinge_angular_velocity_weight: -0.001
+  hinge_position_weight: -1.0
+  hinge_exceed_limit_weight: -10.0
+  hinge_energy_weight: -1.0e-5
+  gait_loop_weight: 1.0
+  foot_sliding_velocity_weight: -1.0
+  foot_lift_height_weight: 1.0
+
+  gait_loop_k: 0.1
+  z_position_target: 0.27
+  hinge_exceed_limit_ratio: 0.95
+  foot_lift_height_target: 0.1
 
 algorithm:
   policy: "MlpPolicy"
   n_steps: 512
   batch_size: 64
   n_epochs: 10
-  learning_rate_init: 5.e-4
+  learning_rate: 5.e-4
   clip_range: 0.2
   vf_coef: 0.5
   gamma: 0.99
   gae_lambda: 0.95
   device: "cpu"
   verbose: 1
-  total_timesteps: 2048000
 
 path:
   output: ".\\output\\"
@@ -58,6 +75,3 @@ is:
   model_body_part_visiable: False
   model_obs_space_visiable: False
   model_action_space_visiable: False
-
-stage:
-  
