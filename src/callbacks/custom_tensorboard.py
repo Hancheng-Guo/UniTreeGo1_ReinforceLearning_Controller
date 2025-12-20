@@ -5,14 +5,24 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 target_items = {
-    "reward_forward": 0,
-    "reward_posture": 0,
-    # "reward_state": 0,
-    "state_loop_time": 0,
-    "x_velocity": 0,
-    "feet_filted_vx_mse": 0,
     "stage": 0,
-    }
+    "alive_reward": 0,
+    "illegal_contact_penalty": 0,
+    "robot_xy_velocity_reward": 0,
+    "z_angular_velocity_reward": 0,
+    "z_velocity_penalty": 0,
+    "z_position_penalty": 0,
+    "xy_angular_velocity_penalty": 0,
+    "xy_angular_penalty": 0,
+    "action_change_penalty": 0,
+    "hinge_angular_velocity_penalty": 0,
+    "hinge_position_penalty": 0,
+    "hinge_exceed_limit_penalty": 0,
+    "hinge_energy_penalty": 0,
+    "foot_sliding_velocity_penalty": 0,
+    "foot_lift_height_reward": 0,
+    "gait_loop_reward": 0,
+}
 
 
 class CustomTensorboardCallback(BaseCallback):

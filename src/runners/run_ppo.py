@@ -1,13 +1,14 @@
 import imageio
 import os
 import io
-import numpy as np
 import re
+import numpy as np
 import matplotlib.pyplot as plt
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
 from datetime import datetime
 from PIL import Image
+from torch import nn
 
 from src.utils.progress_bar import ProgressBar
 from src.renders.tensorboard import ThreadTensorBoard
@@ -50,30 +51,31 @@ def get_save_name():
         os.makedirs(save_dir, exist_ok=True)
     return save_name, save_dir
 
-def get_optional_kwargs(base_name, base_dir, config_inheritance):
+def get_algorithm_kwargs(base_name, base_dir, config_inheritance):
     if base_name and config_inheritance:
         base_config = os.path.join(CONFIG["path"]["output"],
                                    base_dir,
                                    f"cfg_{base_name}.yaml")
         update_CONFIG(base_config)
-    optional_kwargs = get_CONFIG(field="algorithm",
+    algorithm_kwargs = get_CONFIG(field="algorithm",
                                  try_keys=["n_steps", "batch_size", "n_epochs",
                                            "clip_range", "gamma", "gae_lambda",
-                                           "device", "verbose", "vf_coef",])
-    return optional_kwargs
+                                           "device", "verbose", "vf_coef",
+                                           "learning_rate", "policy", "policy_kwargs"])
+    return algorithm_kwargs
 
-def load_model(env, base_name, base_dir, config, **kwargs):
+def load_model(env, base_name, base_dir, algorithm_kwargs={}, **kwargs):
     if base_name:
         base_model = os.path.join(base_dir, f"mdl_{base_name}.zip")
         base_env = os.path.join(base_dir, f"env_{base_name}.pkl")
         env = VecNormalize.load(base_env, env)
-        model = PPO.load(base_model, env=env, **kwargs)
+        algorithm_kwargs.pop("policy", None)
+        algorithm_kwargs.pop("policy_kwargs", None)
+        algorithm_kwargs.pop("learning_rate", None)
+        model = PPO.load(base_model, env=env, **algorithm_kwargs, **kwargs)
     else:
         env = VecNormalize(env, norm_obs=True, norm_reward=True)
-        model = PPO(policy=CONFIG["algorithm"]["policy"],
-                    learning_rate=CONFIG["algorithm"]["learning_rate_init"],
-                    env=env,
-                    **kwargs)
+        model = PPO(env=env, **algorithm_kwargs, **kwargs)
         
     if CONFIG["is"]["model_body_part_visiable"]:
         display_body(env)
@@ -176,13 +178,12 @@ def ppo_train(base_name=None, config_inheritance=False, note_skip=False):
     tensorboard_thread = ThreadTensorBoard(log_path=CONFIG["path"]["output"])
     tensorboard_thread.run()
     
-    optional_kwargs = get_optional_kwargs(base_name, base_dir, config_inheritance)
+    algorithm_kwargs = get_algorithm_kwargs(base_name, base_dir, config_inheritance)
     train_env = make_env("train", config=CONFIG)
     model, train_env, callback_kwargs = load_model(train_env, base_name, base_dir,
                                                    tensorboard_log=save_dir,
-                                                   config=CONFIG,
-                                                   **optional_kwargs)
-    model.learn(total_timesteps=CONFIG["algorithm"]["total_timesteps"],
+                                                   algorithm_kwargs=algorithm_kwargs)
+    model.learn(total_timesteps=CONFIG["train"]["total_timesteps"],
                 tb_log_name=f"log_{save_name}",
                 callback=[StageScheduleCallback(**callback_kwargs),
                           ProgressBarCallback(**callback_kwargs),
@@ -190,7 +191,7 @@ def ppo_train(base_name=None, config_inheritance=False, note_skip=False):
                           AdaptiveLRCallback(**callback_kwargs),
                           CustomCheckpointCallback(save_name, save_dir, note,
                                                    **callback_kwargs)
-                         ],)
+                         ])
     
     tensorboard_thread.stop()
     train_env.close()
@@ -207,8 +208,7 @@ def ppo_test(test_name=None, n_tests=3, max_steps=1000, mode=""):
 
     if test_name:
         test_env = make_env("demo", config=CONFIG)
-        model, test_env, callback_kwargs = load_model(test_env, test_name, test_dir,
-                                                      config=CONFIG)
+        model, test_env, callback_kwargs = load_model(test_env, test_name, test_dir)
         test_env.envs[0].env.env.env.env.stage = np.load(callback_kwargs["base_stage"])
         test_env.training = False
         test_env.norm_reward = False

@@ -47,8 +47,9 @@ def smoothstep_Cinf(x, a=0, b=1, scale=1, alpha=1):
 
     return y * scale
 
-def _const(_, c=0, *args, **kwargs):
-    return c
+def _const(x, c=0, *args, **kwargs):
+    x = np.asarray(x, dtype=float)
+    return np.ones_like(x) * c
 
 class StepGain():
     def __init__(self, points={}, alpha=1):
@@ -59,7 +60,7 @@ class StepGain():
 
     def __call__(self, x):
         x = np.asarray(x, dtype=float)
-        y = np.empty_like(x)
+        y = np.zeros_like(x)
         for i in range(len(self.fun)):
             y += self.fun[i](x)
         return y
