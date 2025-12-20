@@ -9,68 +9,63 @@ from torch.utils.tensorboard import SummaryWriter
 
 
 class Stage(IntEnum):
-    early = 0
-    mid = 1
-    late = 2
-    done = 3
+    idle = 0
+    straight_trot = 1
+    trot = 2
+    canter = 3
+    gallop = 4
     
 class StageScheduleCallback(BaseCallback):
     def __init__(self, 
                  base_stage = None,
+                 control_generator_schedule = None,
                  verbose = 0,
                  **kwargs):
         super().__init__(verbose)
         self.base_stage = base_stage
         self.stage = None
         self.winlen = None
+        self.control_generator_schedule = control_generator_schedule
 
-        self.state_loop_min = None
-        self.state_loop_tmp = None
-        self.x_velocities = None
-        self.alive_fun = StepGain({0.:Stage.early,
-                                   150.:Stage.mid,
-                                   500.:Stage.late,
-                                   800.:Stage.done})
-        self.in_state_loop_fun = StepGain({-1.:Stage.mid,
-                                           0.6:Stage.late,
-                                           0.7:Stage.done})
-        self.x_velocities_fun = StepGain({-5.0:Stage.mid,
-                                          3.0:Stage.late,
-                                          5.0:Stage.done})
+        self.ep_lengths = None
+        self.ep_lengths_fun = StepGain(
+            {0.0:  Stage.idle,
+             400.0:Stage.straight_trot,
+             450.0:Stage.trot,
+             500.0:Stage.canter,
+             550.0:Stage.gallop})
+        
+        self.robot_x_velocity_mse_exp = None
+        self.robot_x_velocity_mse_exp_fun = StepGain({0.0: 0, 0.8: 1})
 
     def _on_training_start(self):
         self.winlen = self.model.n_steps * self.model.n_envs
-        self.x_velocities = [0 for _ in range(self.model.n_envs)]
-        self.state_loop_min = [np.inf for _ in range(self.model.n_envs)]
-        self.state_loop_tmp = [-1 for _ in range(self.model.n_envs)]
         if self.base_stage is not None:
             self.stage = np.load(self.base_stage)
         else:
-            self.stage = Stage.early
+            self.stage = Stage.idle
         return True
     
     def _on_rollout_start(self):
+        self.ep_lengths = []
+        self.robot_x_velocity_mse_exp = []
         for env in self.model.env.venv.envs:
             env.env.env.env.env.stage = self.stage
         return True
     
     def _on_step(self):
-        for i, env in enumerate(self.model.env.venv.envs):
-            self.x_velocities[i] += env.env.env.env.env.forward_info["x_velocity"]
-            if env.env.env.env.env.state_info["state_loop_time"] != (self.state_loop_tmp[i] + 1):
-                self.state_loop_min[i] = min(self.state_loop_min[i], self.state_loop_tmp[i])
-            self.state_loop_tmp[i] = env.env.env.env.env.state_info["state_loop_time"]
-            
+        for info in self.locals.get("infos", []):
+            if "episode" in info:
+                self.ep_lengths.append(info["episode"]["l"])
+        for env in self.model.env.venv.envs:
+            self.robot_x_velocity_mse_exp.append(
+                env.env.env.env.env.reward.reward_info["robot_x_velocity_mse_exp"])
         return True
     
     def _on_rollout_end(self):
-
-        has_ep_mean = len(self.model.ep_info_buffer) > 0 and len(self.model.ep_info_buffer[0]) > 0
-        ep_len_mean = safe_mean([ep_info["l"] for ep_info in self.model.ep_info_buffer]) if has_ep_mean else 0
-        # ep_rew_mean = safe_mean([ep_info["r"] for ep_info in self.model.ep_info_buffer]) if has_ep_mean else 0
-        stage_alive = self.alive_fun(ep_len_mean)
-        stage_pct_state_loop = self.in_state_loop_fun(min(self.state_loop_min) / self.model.n_steps)
-        stage_x_velocity = self.x_velocities_fun(np.mean(self.x_velocities) / self.model.n_steps)
-
-        self.stage = max(min(stage_x_velocity, stage_pct_state_loop, stage_alive), self.stage)
+        stage_robot_x_velocity_mse_exp = self.robot_x_velocity_mse_exp_fun(
+            np.mean(self.robot_x_velocity_mse_exp)) + int(self.stage)
+        stage_ep_lengths = self.ep_lengths_fun(np.mean(self.ep_lengths))
+        self.stage = max(min(stage_robot_x_velocity_mse_exp,  stage_ep_lengths),
+                         self.stage)
         return True
