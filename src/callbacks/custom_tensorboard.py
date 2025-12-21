@@ -19,9 +19,10 @@ target_items = {
     "hinge_position_penalty": 0,
     "hinge_exceed_limit_penalty": 0,
     "hinge_energy_penalty": 0,
+    "gait_loop_reward": 0,
+    "feet_state_duration_reward": 0,
     "foot_sliding_velocity_penalty": 0,
     "foot_lift_height_reward": 0,
-    "gait_loop_reward": 0,
 }
 
 
