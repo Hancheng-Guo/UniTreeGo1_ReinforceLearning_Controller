@@ -216,6 +216,7 @@ class UniTreeGo1Reward:
             alive_weight,
             illegal_contact_weight,
             robot_xy_velocity_weight,
+            robot_xy_velocity_alpha,
             z_angular_velocity_weight,
             z_velocity_weight,
             z_position_weight,
@@ -240,7 +241,8 @@ class UniTreeGo1Reward:
         self.rewards = {
             "alive":                    NewReward(self.env, rwd.is_alive, alive_weight),
             "illegal_contact":          NewReward(self.env, rwd.illegal_contact_l1, illegal_contact_weight),
-            "robot_xy_velocity":        NewReward(self.env, rwd.robot_xy_velocity_l2_exp, robot_xy_velocity_weight),
+            "robot_xy_velocity":        NewReward(self.env, rwd.robot_xy_velocity_l2_exp, robot_xy_velocity_weight,
+                                                  robot_xy_velocity_alpha=robot_xy_velocity_alpha),
             "z_angular_velocity":       NewReward(self.env, rwd.z_angular_velocity_l2_exp, z_angular_velocity_weight),
             "z_velocity":               NewReward(self.env, rwd.z_velocity_l2, z_velocity_weight,),
             "z_position":               NewReward(self.env, rwd.z_position_l2, z_position_weight,

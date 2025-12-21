@@ -21,6 +21,9 @@ def get_CONFIG(cfg=CONFIG, field=None, try_keys=[]):
         for try_key in try_keys:
             if try_key in try_cfg:
                 try_value = try_cfg.get(try_key)
-                optional_cfg[try_key] = try_value
+                if isinstance(try_value, (list, dict, set)):
+                    optional_cfg[try_key] = try_value.copy()
+                else:
+                    optional_cfg[try_key] = try_value
         return optional_cfg
     return {}

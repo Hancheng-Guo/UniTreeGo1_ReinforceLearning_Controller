@@ -9,9 +9,9 @@ from collections import deque
 fatal_contact = ["trunk", "FR_hip", "FL_hip", "RR_hip", "RL_hip"]
 # x_velocity_control = 0
 idle_loop = [0b1111]
-# x_velocity_control ∈ (0, 2]
-walk_loop = [0b1110, 0b1010, 0b1011, 0b1101, 0b0101, 0b0111]
-# x_velocity_control ∈ (2, 6]
+# # x_velocity_control ∈ (0, 2]
+# walk_loop = [0b1110, 0b1010, 0b1011, 0b1101, 0b0101, 0b0111]
+# x_velocity_control ∈ (0, 6]
 trot_loop = [0b1001, 0b0110]
 # x_velocity_control ∈ (6, 8]
 canter_loop_A = [0b1110, 0b1000, 0b0000, 0b0001, 0b0111, 0b0110]
@@ -22,7 +22,6 @@ gallop_loop_B = [0b0100, 0b1100, 0b1000, 0b0000, 0b0001, 0b0011, 0b0010, 0b0000]
 
 gait_loop_dict = {
     "idle": [idle_loop],
-    "walk": [walk_loop],
     "trot": [trot_loop],
     "canter": [canter_loop_A, canter_loop_B],
     "gallop": [gallop_loop_A, gallop_loop_B],
@@ -92,12 +91,12 @@ def robot_xy_velocity_l2_exp(rwd):
     robot_x_velocity = robot_velocity[0]
     robot_x_velocity_target = rwd.env.control_vector[0]
     robot_x_velocity_l2 = np.square(robot_x_velocity - robot_x_velocity_target)
-    robot_x_velocity_l2_exp = np.exp(-robot_x_velocity_l2)
+    robot_x_velocity_l2_exp = np.exp(-robot_x_velocity_l2 * rwd.robot_xy_velocity_alpha)
 
     robot_y_velocity = robot_velocity[1]
     robot_y_velocity_target = rwd.env.control_vector[1]
     robot_y_velocity_l2 = np.square(robot_y_velocity - robot_y_velocity_target)
-    robot_y_velocity_l2_exp = np.exp(-robot_y_velocity_l2)
+    robot_y_velocity_l2_exp = np.exp(-robot_y_velocity_l2 * rwd.robot_xy_velocity_alpha)
 
     info = {
         "robot_x_velocity": robot_x_velocity,
@@ -244,10 +243,8 @@ def gait_loop_duration_tanh(rwd):
         gait_target = "gallop"
     elif x_velocity_control > 6:
         gait_target = "canter"
-    elif x_velocity_control > 2:
-        gait_target = "trot"
     elif x_velocity_control > 0:
-        gait_target = "walk"
+        gait_target = "trot"
     else:
         gait_target = "idle"
     info["gait_target"] = gait_target
