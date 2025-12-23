@@ -45,7 +45,10 @@ class UniTreeGo1ControlGenerator:
         for i, controller in enumerate(self.controllers):
             amp = self.schedule[i]["amp"][int(self.env.stage)]
             avg = self.schedule[i]["avg"][int(self.env.stage)]
-            control_vector.append(amp * controller.step() + avg)
+            control_item = np.clip(amp * controller.step() + avg,
+                                   self.schedule[i]["clip"][0],
+                                   self.schedule[i]["clip"][1])
+            control_vector.append(control_item)
         return np.array(control_vector)
     
     def reset(self):

@@ -10,10 +10,14 @@ from torch.utils.tensorboard import SummaryWriter
 
 class Stage(IntEnum):
     idle = 0
-    straight_trot = 1
-    trot = 2
-    canter = 3
-    gallop = 4
+    trot_a = 1
+    trot_b = 2
+    trot_c = 3
+    canter_a = 4
+    canter_b = 5
+    gallop_a = 6
+    gallop_b = 7
+    done = 8
     
 class StageScheduleCallback(BaseCallback):
     def __init__(self, 
@@ -29,17 +33,21 @@ class StageScheduleCallback(BaseCallback):
 
         self.ep_lengths = None
         self.ep_lengths_fun = StepGain(
-            {0.0:  Stage.idle,
-             400.0:Stage.straight_trot,
-             450.0:Stage.trot,
-             500.0:Stage.canter,
-             550.0:Stage.gallop})
+            {0.0:   Stage.idle,
+             400.0: Stage.trot_a,
+             450.0: Stage.done})
         
-        self.robot_x_velocity_mse_exp = None
-        self.robot_x_velocity_mse_exp_fun = StepGain({0.0: 0, 0.8: 1})
+        self.robot_x_velocity_l2_exp = None
+        self.robot_y_velocity_l2_exp = None
+        self.z_angular_velocity_l2_exp = None
+        self.robot_velocity_fun = StepGain({0.0: 0, 0.9: 1})
 
     def _on_training_start(self):
         self.winlen = self.model.n_steps * self.model.n_envs
+        self.ep_lengths = deque([], maxlen=100)
+        self.robot_x_velocity_l2_exp = deque([], maxlen=self.winlen)
+        self.robot_y_velocity_l2_exp = deque([], maxlen=self.winlen)
+        self.z_angular_velocity_l2_exp = deque([], maxlen=self.winlen)
         if self.base_stage is not None:
             self.stage = np.load(self.base_stage)
         else:
@@ -47,8 +55,6 @@ class StageScheduleCallback(BaseCallback):
         return True
     
     def _on_rollout_start(self):
-        self.ep_lengths = []
-        self.robot_x_velocity_mse_exp = []
         for env in self.model.env.venv.envs:
             env.env.env.env.env.stage = self.stage
         return True
@@ -58,14 +64,27 @@ class StageScheduleCallback(BaseCallback):
             if "episode" in info:
                 self.ep_lengths.append(info["episode"]["l"])
         for env in self.model.env.venv.envs:
-            self.robot_x_velocity_mse_exp.append(
-                env.env.env.env.env.reward.reward_info["robot_x_velocity_mse_exp"])
+            reward_info = env.env.env.env.env.reward.reward_info
+            self.robot_x_velocity_l2_exp.append(reward_info["robot_x_velocity_l2_exp"])
+            self.robot_y_velocity_l2_exp.append(reward_info["robot_y_velocity_l2_exp"])
+            self.z_angular_velocity_l2_exp.append(reward_info["z_angular_velocity_l2_exp"])
         return True
     
     def _on_rollout_end(self):
-        stage_robot_x_velocity_mse_exp = self.robot_x_velocity_mse_exp_fun(
-            np.mean(self.robot_x_velocity_mse_exp)) + int(self.stage)
+        stage_robot_x_velocity_l2_exp = (int(self.stage) +
+            self.robot_velocity_fun(np.mean(self.robot_x_velocity_l2_exp)))
+        
+        stage_robot_y_velocity_l2_exp = (int(self.stage) +
+            self.robot_velocity_fun(np.mean(self.robot_y_velocity_l2_exp)))
+        
+        stage_z_angular_velocity_l2_exp = (int(self.stage) +
+            self.robot_velocity_fun(np.mean(self.z_angular_velocity_l2_exp)))
+        
         stage_ep_lengths = self.ep_lengths_fun(np.mean(self.ep_lengths))
-        self.stage = max(min(stage_robot_x_velocity_mse_exp,  stage_ep_lengths),
+        
+        self.stage = max(min(stage_ep_lengths,
+                             stage_robot_x_velocity_l2_exp,
+                             stage_robot_y_velocity_l2_exp,
+                             stage_z_angular_velocity_l2_exp),
                          self.stage)
         return True

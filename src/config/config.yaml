@@ -4,7 +4,7 @@ train:
   reset_noise_scale: 0.1
   max_episode_steps: 1000
   total_timesteps: 20480000
-  checkpoint_freq: 2048000
+  checkpoint_freq: 1024000
   custom_log_freq: 2048
 
 demo:
@@ -21,18 +21,33 @@ control:
   generator_theta: 1.0
   generator_smooth_order: 5
   generator_schedule: [
-    {"name": "robot_x_velocity",    "amp": [0.0, 1.0, 3.0, 4.0, 5.0],  "avg": [0.0, 1.0, 3.0, 4.0, 5.0]},
-    {"name": "robot_y_velocity",    "amp": [0.0, 0.0, 0.2, 0.5, 1.0],  "avg": [0.0, 0.0, 0.2, 0.5, 1.0]},
-    {"name": "z_angular_velocity",  "amp": [0.0, 0.0, 0.2, 0.5, 1.0],  "avg": [0.0, 0.0, 0.0, 0.0, 0.0]},
+    {
+      "name": "robot_x_velocity",
+      "clip": [0.0, 10.0],
+      "avg": [0.0, 2.0, 3.0, 2.0, 6.0, 3.0, 7.0, 3.0, 3.0],
+      "amp": [0.0, 0.0, 0.0, 4.0, 2.0, 5.0, 3.0, 7.0, 7.0],
+    },
+    {
+      "name": "robot_y_velocity",
+      "clip": [-5, 5],
+      "avg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "amp": [0.0, 0.0, 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+    },
+    {
+      "name": "z_angular_velocity",
+      "clip": [-3.14, 3.14],
+      "avg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "amp": [0.0, 0.0, 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+    },
   ]
 
 reward:
-  alive_weight: 1.0
+  alive_weight: 0.1
   illegal_contact_weight: -1.0
-  robot_xy_velocity_weight: 1.0
-  z_angular_velocity_weight: 1.0
+  robot_xy_velocity_weight: 10.0
+  z_angular_velocity_weight: 10.0
   z_velocity_weight: -1.0
-  z_position_weight: -10.0
+  z_position_weight: -1.0
   xy_angular_velocity_weight: -0.1
   xy_angular_weight: -0.1
   action_change_weight: -0.1
@@ -41,12 +56,15 @@ reward:
   hinge_exceed_limit_weight: -10.0
   hinge_energy_weight: -1.0e-5
   gait_loop_weight: 1.0
+  feet_state_duration_weight: 1.0
   foot_sliding_velocity_weight: -1.0
   foot_lift_height_weight: 1.0
 
-  gait_loop_k: 0.1
+  robot_xy_velocity_alpha: 1.0
   z_position_target: 0.27
   hinge_exceed_limit_ratio: 0.95
+  gait_loop_k: 0.1
+  feet_state_k: 0.05
   foot_lift_height_target: 0.1
 
 algorithm:
