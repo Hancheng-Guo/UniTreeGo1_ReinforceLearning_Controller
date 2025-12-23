@@ -46,9 +46,9 @@ class ProgressBar():
         print((f" >{self.custom_str} "
                f"{call_times_str}"
                f"{(frac * 100):^3.0f}% "
-               f"{"\u2588" * done_len}"
+               f"{'\u2588' * done_len}"
                f"{(self.loop[-loop_i:] + self.loop[:-loop_i])[done_len:-(2 * self.hl_len)]} "
-               f"{f"{done:>{self.dig_len}d}"}/{f"{self.total:>{self.dig_len}d}"} steps "),
+               f"{f'{done:>{self.dig_len}d}'}/{f'{self.total:>{self.dig_len}d}'} steps "),
                end=end_str)
         return True
 
