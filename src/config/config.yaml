@@ -19,7 +19,7 @@ demo:
 control:
   control_type: "generate"
   generator_theta: 1.0
-  generator_smooth_order: 5
+  generator_smooth_order: 20
   generator_schedule: [
     {
       "name": "robot_x_velocity",
@@ -37,7 +37,7 @@ control:
       "name": "z_angular_velocity",
       "clip": [-3.14, 3.14],
       "avg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-      "amp": [0.0, 0.0, 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+      "amp": [0.0, 0.0, 0.2, 0.5, 1.0, 1.0, 1.5, 1.5, 1.5],
     },
   ]
 
