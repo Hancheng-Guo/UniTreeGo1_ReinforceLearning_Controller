@@ -3,7 +3,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 
 class AdaptiveLRCallback(BaseCallback):
     def __init__(self, smooth_step_len=2000,
-                 kl_min=0.01, kl_max=0.1,
+                 kl_min=0.01, kl_max=0.2,
                  lr_min=1e-6, lr_max=5e-3,
                  factor=2, verbose=0,
                  **kwargs):

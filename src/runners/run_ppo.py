@@ -177,7 +177,7 @@ def ppo_train(base_name=None, config_inheritance=False, note_skip=False):
     base_name, base_dir = check_base_name(base_name)
     save_name, save_dir = get_save_name()
 
-    tensorboard_thread = ThreadTensorBoard(log_path=CONFIG["path"]["output"])
+    tensorboard_thread = ThreadTensorBoard(log_path=save_dir)
     tensorboard_thread.run()
     
     algorithm_kwargs = get_algorithm_kwargs(base_name, base_dir, config_inheritance)
@@ -187,8 +187,8 @@ def ppo_train(base_name=None, config_inheritance=False, note_skip=False):
                                                    algorithm_kwargs=algorithm_kwargs)
     model.learn(total_timesteps=CONFIG["train"]["total_timesteps"],
                 tb_log_name=f"log_{save_name}",
-                callback=[StageScheduleCallback(**callback_kwargs),
-                          ProgressBarCallback(**callback_kwargs),
+                callback=[ProgressBarCallback(**callback_kwargs),
+                          StageScheduleCallback(**callback_kwargs),
                           CustomTensorboardCallback(**callback_kwargs),
                           AdaptiveLRCallback(**callback_kwargs),
                           CustomCheckpointCallback(save_name, save_dir, note,
