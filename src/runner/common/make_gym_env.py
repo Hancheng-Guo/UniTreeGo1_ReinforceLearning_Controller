@@ -1,8 +1,7 @@
 import gymnasium as gym
-from stable_baselines3.common.env_util import make_vec_env
 from gymnasium.envs.registration import register
 
-from src.renders.mujoco import modify_model_camera
+from src.runner.common.modify_model_camera import modify_model_camera
 
 
 register(
@@ -36,33 +35,5 @@ def make_gym_env(config, *args, **kwargs):
     return gym.make(*args, **kwargs)
 
 
-def make_train_env(config, *args, **kwargs):
-    return make_gym_env(config, *args, **kwargs)
-
-
-def make_demo_env(config, *args, **kwargs):
-    env_mode = "train" if config["is"]["param_shared"] else "demo"
-    return make_gym_env(config,
-                        render_mode=config["demo"]["demo_type"],
-                        width=config["demo"]["mjc_render_width"],
-                        height=config["demo"]["mjc_render_height"],
-                        *args, **kwargs)
 
     
-def make_env(mode, config={}, *args, **kwargs):
-
-    if not config:
-        print("config is empty!")
-        return
-    
-    if mode == "train":
-        return make_vec_env(lambda: make_train_env(config),
-                            n_envs=config["train"]["n_envs"],
-                            *args, **kwargs)
-    elif mode == "demo":
-        return make_vec_env(lambda: make_demo_env(config),
-                            n_envs=1,
-                            *args, **kwargs)
-    else:
-        print("make env error!")
-        return

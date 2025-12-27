@@ -1,21 +1,18 @@
 import mujoco
 import copy
 import numpy as np
-from collections import deque
-from enum import IntEnum
 from gymnasium.spaces import Box
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 
-import src.env.rewards as rwd
-from src.renders.matplotlib import PltRenderer
-from src.renders.mujoco import set_tracking_camera
-from src.utils.decays import radial_decay, clip_exp_decay, clip_exp_gain, clip_step_decay, StepGain
-from src.callbacks.stage_schedule import Stage
-from src.env.control import UniTreeGo1ControlGenerator, UniTreeGo1ControlROS
+import src.reward.base as rwd
+from src.reward.base import NewReward
+from src.control.base import UniTreeGo1ControlGenerator, UniTreeGo1ControlROS
+from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
 
 feet = ["FR", "FL", "RR", "RL"]
 hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
+
 
 class UniTreeGo1Env(AntEnv):
     def __init__(
@@ -44,33 +41,33 @@ class UniTreeGo1Env(AntEnv):
                          width=width,
                          height=height)
 
+        # for stage
         self.stage = 0 # update in callback
+        # for reward
         self.action = None
         self.action_old = None
-        self.reward = UniTreeGo1Reward(self, reward_config=kwargs["reward_config"])
-        self.controller = UniTreeGo1Control(self, control_config=kwargs["control_config"])
-        self.control_vector = self.controller.get()
-        # for demo
-        self.render_mode = render_mode
-        self._init_render(plt_n_lines, plt_x_range)
-        self.mjc_img = None
-        self.plt_img = None
-        # for obs
-        self._init_customize_obs()
-        self._hip_joint_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_JOINT, hip_joint)
-                               for hip_joint in hip_joints]
-        self._hip_joint_addrs = [self.model.jnt_qposadr[hip_joint_id]
-                                 for hip_joint_id in self._hip_joint_ids]
         self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
                           for foot in feet]
         self._floor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
+        self.reward = UniTreeGo1Reward(self, reward_config=kwargs["reward_config"])
+        # for control
+        self.controller = UniTreeGo1Control(self, control_config=kwargs["control_config"])
+        self.control_vector = self.controller.get()
+        # for obs
+        self._init_customize_obs()
+        # for demo
+        self.render_mode = render_mode
+        self.callbacks = [CustomMatPlotLibCallback(render_mode,
+                                                   plt_n_lines=plt_n_lines,
+                                                   plt_x_range=plt_x_range),
+                          CustomMujocoCallback(render_mode),]
+        self._dispatch("_on_training_start", self)
+        
 
     def reset(self, *, seed=None, options=None):
         ob, info = super().reset(seed=seed, options=options)
         self.controller.reset()
-        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
-            set_tracking_camera(self)
-            self.plt_render.reset()
+        self._dispatch("_on_episode_start")
         return ob, info
     
     def step(self, action):
@@ -80,38 +77,34 @@ class UniTreeGo1Env(AntEnv):
         self.do_simulation(action, self.frame_skip)
 
         observation = self._get_obs()
-        reward, reward_info = self._get_rew()
-        terminated = (not reward_info["is_alive"]) and self._terminate_when_unhealthy
+        reward, reward_info, is_alive = self._get_rew()
+        terminated = (not is_alive) and self._terminate_when_unhealthy
         info = {"stage": self.stage, "reward": reward, **reward_info}
 
-        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
-            self.mjc_img = self.render()
-            self.plt_img = self.plt_render(self.state_vector(), info)
-            if terminated:
-                self.plt_render.reset()
+        self._dispatch("_on_step", state=self.state_vector(), info=info)
+        if terminated:
+            self._dispatch("_on_episode_end")
 
         # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
         return observation, reward, terminated, False, info
     
-    def _get_rew(self, *akwargs, **kwargs):
-        return self.reward()
-    
-    # region | Render
-
-    def _init_render(self, plt_n_lines, plt_x_range):
-        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
-            self.plt_render = PltRenderer(self.render_mode,
-                                          plt_n_lines=plt_n_lines,
-                                          plt_x_range=plt_x_range)
-            self.plt_render.reset()
 
     def render(self, render_mode=None):
-        if render_mode:
-            return self.mujoco_renderer.render(render_mode)
-        return self.mujoco_renderer.render(self.render_mode)
+        return self.mujoco_renderer.render(render_mode)
 
-    # endregion
 
+    def _get_rew(self, *akwargs, **kwargs):
+        reward, reward_info = self.reward()
+        is_alive = reward_info["is_alive"]
+        return reward, reward_info, is_alive
+    
+
+    def _dispatch(self, event_name, *args, **kwargs):
+        for cb in self.callbacks:
+            fn = getattr(cb, event_name, None)
+            if fn is not None:
+                fn(*args, **kwargs)
+    
     # region | Obs
 
     def _init_customize_obs(self):
@@ -130,31 +123,10 @@ class UniTreeGo1Env(AntEnv):
         return np.concatenate((obs, feet_obs.flatten(), control_obs.flatten()))
 
     def _get_feet_obs(self):
-        for i, is_touching in enumerate(self._are_feet_touching_ground):
+        for i, is_touching in enumerate(rwd.are_foot_touching_ground(self)):
             self._feet_airborne_time[i] = 0 if is_touching else self._feet_airborne_time[i] + 1
             self._feet_landed_time[i] = self._feet_landed_time[i] + 1 if is_touching else 0
         return np.concatenate((self._feet_landed_time.flatten(), self._feet_airborne_time.flatten()))
-    
-    @property
-    def _are_feet_touching_ground(self):
-        are_touching = []
-        for foot_id in self._foot_ids:
-            is_touching = False
-            for c in self.data.contact:
-                is_touching = ((c.geom1 == foot_id and c.geom2 == self._floor_id) or
-                               (c.geom1 == self._floor_id and c.geom2 == foot_id))
-                if is_touching:
-                    break
-            are_touching.append(is_touching)
-        return are_touching
-    
-    @property
-    def _feet_state(self):
-        _are_feet_touching_ground = self._are_feet_touching_ground
-        n = len(_are_feet_touching_ground)
-        return sum(int(b) << (n - 1 - i) for i, b in enumerate(_are_feet_touching_ground))
-    
-    # endregion
 
 # region | Control
 
@@ -178,21 +150,6 @@ class UniTreeGo1Control:
 # endregion
 
 # region | Reward
-
-class NewReward:
-    def __init__(self, env, fun, weight, stage_range=[-np.inf, np.inf], **kwargs):
-        self.env = env
-        self.fun = fun
-        self.weight = weight
-        self.stage_range = stage_range
-        self.__dict__.update(kwargs)
-        
-    def __call__(self) -> float:
-        if (self.env.stage < self.stage_range[0]): return 0, {}
-        if (self.env.stage >= self.stage_range[-1]): return 0, {}
-        reward, reward_info = self.fun(self)
-        return self.weight * reward, reward_info
-
 
 class UniTreeGo1Reward:
     def __init__(self, env, reward_config):
@@ -231,8 +188,8 @@ class UniTreeGo1Reward:
             hinge_energy_weight,
             gait_loop_weight,
             gait_loop_k,
-            feet_state_duration_weight,
-            feet_state_k,
+            foot_state_duration_weight,
+            foot_state_k,
             foot_sliding_velocity_weight,
             foot_lift_height_weight,
             foot_lift_height_target,
@@ -259,8 +216,8 @@ class UniTreeGo1Reward:
             "hinge_energy":             NewReward(self.env, rwd.hinge_energy_l1, hinge_energy_weight),
             "gait_loop":                NewReward(self.env, rwd.gait_loop_duration_tanh, gait_loop_weight,
                                                   gait_loop_k=gait_loop_k, gait_type=None, gait_loop_options=[], gait_loop_duration=0),
-            "feet_state_duration":      NewReward(self.env, rwd.feet_state_duration_exp, feet_state_duration_weight,
-                                                  feet_state_k=feet_state_k, feet_state_old=None, feet_state_duration=0),
+            "foot_state_duration":      NewReward(self.env, rwd.foot_state_duration_exp, foot_state_duration_weight,
+                                                  foot_state_k=foot_state_k, foot_state_old=None, foot_state_duration=0),
             "foot_sliding_velocity":    NewReward(self.env, rwd.foot_sliding_velocity_l2, foot_sliding_velocity_weight),
             "foot_lift_height":         NewReward(self.env, rwd.foot_lift_height_l2_exp_xy_vel_weighted, foot_lift_height_weight,
                                                   foot_lift_height_target=foot_lift_height_target),

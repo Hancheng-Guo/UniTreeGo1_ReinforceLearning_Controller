@@ -56,7 +56,7 @@ reward:
   hinge_exceed_limit_weight: -5.0
   hinge_energy_weight: -2.0e-5
   gait_loop_weight: 1.0
-  feet_state_duration_weight: 1.0
+  foot_state_duration_weight: 1.0
   foot_sliding_velocity_weight: -0.2
   foot_lift_height_weight: 1.0
 
@@ -64,7 +64,7 @@ reward:
   hinge_position_std: 0.2
   hinge_exceed_limit_ratio: 0.95
   gait_loop_k: 0.25
-  feet_state_k: 0.05
+  foot_state_k: 0.05
   foot_lift_height_target: 0.1
 
 algorithm:

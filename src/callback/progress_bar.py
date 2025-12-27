@@ -1,3 +1,6 @@
+from stable_baselines3.common.callbacks import BaseCallback
+
+
 class ProgressBar():
     def __init__(self, total,
                  custom_str="",
@@ -54,4 +57,33 @@ class ProgressBar():
 
     def clear(self) -> bool:
         print("\033[2K\r", end="")
+        return True
+    
+
+class ProgressBarCallback(BaseCallback):
+    def __init__(self, verbose=0, **kwargs):
+        super().__init__(verbose)
+        self.bar = None
+        self.current_step = None
+
+    def _on_training_start(self) -> bool:
+        rollout_steps = self.model.n_steps * self.model.n_envs
+        rollout_times_total = (self.model._total_timesteps + rollout_steps - 1) // rollout_steps
+        self.bar = ProgressBar(total=self.model.n_steps * self.model.n_envs,
+                               custom_str="Rollout",
+                               call_times_total=rollout_times_total)
+        return True
+
+    def _on_rollout_start(self) -> bool:
+        self.bar.reset()
+        self.current_step = 0
+        return True
+
+    def _on_step(self) -> bool:
+        self.current_step += 1
+        self.bar.update(self.current_step * self.model.n_envs)
+        return True
+    
+    def _on_rollout_end(self) -> bool:
+        self.bar.clear()
         return True

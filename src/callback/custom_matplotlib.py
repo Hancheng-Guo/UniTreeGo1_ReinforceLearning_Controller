@@ -21,7 +21,7 @@ def plt_select_kwargs(state, info):
     return selected_kwargs
 
 
-class PltRenderer():
+class CustomMatPlotLibCallback():
     def __init__(self,
                  render_mode,
                  plt_max_col=4,
@@ -56,14 +56,30 @@ class PltRenderer():
             self.plt_axes[i].set_title(key)
         self.plt_line = [[] for _ in range(self.plt_n_lines)]
         self._init()
-        print()
+
         
-    def __call__(self, state, info, *args, **kwds):
-        selected_kwargs = plt_select_kwargs(state, info)
-        self._plot(selected_kwargs)
-        self.fig.canvas.draw()
-        plt_img = np.asarray(self.fig.canvas.renderer.buffer_rgba()).astype(np.uint8)
-        return Image.fromarray(plt_img, mode="RGBA")
+    def _on_training_start(self, env, *args, **kwargs):
+        self.env = env
+        self.env.plt_img = None
+
+    def _on_episode_start(self, *args, **kwargs):
+        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+            self.reset()
+
+
+    def _on_step(self, state, info, *args, **kwargs):
+        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+            selected_kwargs = plt_select_kwargs(state, info)
+            self._plot(selected_kwargs)
+            self.fig.canvas.draw()
+            plt_img = np.asarray(self.fig.canvas.renderer.buffer_rgba()).astype(np.uint8)
+            self.env.plt_img = Image.fromarray(plt_img, mode="RGBA")
+
+
+    def _on_episode_end(self, *args, **kwargs):
+        if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
+            self.reset()
+
     
     def reset(self):
         for line in self.plt_line[0]:
@@ -108,4 +124,3 @@ class PltRenderer():
             ax.set_ylim(ax.dataLim.y0 - y_padding, ax.dataLim.y1 + y_padding)
         except:
             pass
-        

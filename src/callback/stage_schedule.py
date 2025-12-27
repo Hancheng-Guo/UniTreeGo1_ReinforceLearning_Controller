@@ -1,11 +1,8 @@
-from stable_baselines3.common.callbacks import BaseCallback
-from stable_baselines3.common.utils import safe_mean
-from collections import deque
 import numpy as np
-import os
+from stable_baselines3.common.callbacks import BaseCallback
+from collections import deque
 from enum import IntEnum
-from src.utils.decays import StepGain
-from torch.utils.tensorboard import SummaryWriter
+from functools import partial
 
 
 class Stage(IntEnum):
@@ -18,7 +15,69 @@ class Stage(IntEnum):
     gallop_a = 6
     gallop_b = 7
     done = 8
+
+
+def smoothstep_Cinf(x, a=0, b=1, scale=1, alpha=1):
+    assert b > a
+    assert alpha > 0
+
+    x = np.asarray(x, dtype=float)
+    y = np.empty_like(x)
+    y[x <= (a + 1e-5)] = 0.0
+    y[x >= (b - 1e-5)] = 1.0
+
+    m = (x > (a + 1e-5)) & (x < (b - 1e-5))
+    k = (x[m] - a) / (b - a)
+    eta_k  = np.exp(-1 / (alpha * k))
+    eta_1k = np.exp(-1 / (alpha * (1 - k)))
+    y[m] = eta_k / (eta_k + eta_1k)
+
+    return y * scale
+
+
+def _const(x, c=0, *args, **kwargs):
+    x = np.asarray(x, dtype=float)
+    return np.ones_like(x) * c
+
+
+class SmoothStep():
+    def __init__(self, points={}, alpha=1):
+        self._alpha = alpha
+        self._points = points
+        self._increment =self._get_increment(self._points)
+        self.fun = self._get_fun(self._increment)
+
+    def __call__(self, x):
+        x = np.asarray(x, dtype=float)
+        y = np.zeros_like(x)
+        for i in range(len(self.fun)):
+            y += self.fun[i](x)
+        return y
     
+    def _get_increment(self, point_dict):
+        increment = {}
+        prev_y = None
+        for x, y in sorted(point_dict.items()):
+            if prev_y is None:
+                increment[x] = y
+            else:
+                increment[x] = y - prev_y
+            prev_y = y
+        return increment
+    
+    def _get_fun(self, increment_dict):
+        fun = []
+        prve_key = None
+        for idx, (key, value) in enumerate(increment_dict.items()):
+            if idx == 0:
+                fun.append(partial(_const, c=value))
+            else:
+                fun.append(
+                    partial(smoothstep_Cinf, a=prve_key, b=key, scale=value, alpha=self._alpha))
+            prve_key = key
+        return fun
+    
+
 class StageScheduleCallback(BaseCallback):
     def __init__(self, 
                  base_stage = None,
@@ -32,7 +91,7 @@ class StageScheduleCallback(BaseCallback):
         self.control_generator_schedule = control_generator_schedule
 
         self.ep_lengths = None
-        self.ep_lengths_fun = StepGain(
+        self.ep_lengths_fun = SmoothStep(
             {0.0:   Stage.idle,
              500.0: Stage.trot_a,
              800.0: Stage.done})
@@ -40,9 +99,9 @@ class StageScheduleCallback(BaseCallback):
         self.robot_x_velocity = None
         self.robot_y_velocity = None
         self.z_angular_velocity = None
-        self.robot_x_velocity_fun = StepGain({0.0: 0, 0.9: 1})
-        self.robot_y_velocity_fun = StepGain({0.0: 0, 0.9: 1})
-        self.z_angular_velocity_fun = StepGain({0.0: 0, 0.75: 1})
+        self.robot_x_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
+        self.robot_y_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
+        self.z_angular_velocity_fun = SmoothStep({0.0: 0, 0.75: 1})
 
     def _on_training_start(self):
         self.winlen = self.model.n_steps * self.model.n_envs
