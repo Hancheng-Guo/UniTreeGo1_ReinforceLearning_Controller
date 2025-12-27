@@ -12,12 +12,12 @@ class OUProcess:
         self.order = order
         self.memory = deque(np.zeros(self.order-1), maxlen=self.order-1)
 
-    def step(self):
+    def step(self, amp, avg):
         eps = self.rng.standard_normal()
         self.x += -self.theta * self.x * self.dt + np.sqrt(self.dt) * eps
-        y = (np.sum(self.memory) + self.x) / self.order
+        y = self.x / (3 * self.sigma) * amp + avg
         self.memory.append(y)
-        return np.clip(y / (3 * self.sigma), -1.0, 1.0)
+        return np.sum(self.memory) / self.order
     
     def reset(self):
         self.x = 0.
@@ -45,7 +45,7 @@ class UniTreeGo1ControlGenerator:
         for i, controller in enumerate(self.controllers):
             amp = self.schedule[i]["amp"][int(self.env.stage)]
             avg = self.schedule[i]["avg"][int(self.env.stage)]
-            control_item = np.clip(amp * controller.step() + avg,
+            control_item = np.clip(controller.step(amp, avg),
                                    self.schedule[i]["clip"][0],
                                    self.schedule[i]["clip"][1])
             control_vector.append(control_item)

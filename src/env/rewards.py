@@ -68,6 +68,7 @@ def is_alive(rwd):
     
     return True, {"is_alive": True}
 
+
 def illegal_contact_l1(rwd):
     illegal_contact_l1 = 0.
     for c in rwd.env.data.contact:
@@ -91,36 +92,42 @@ def robot_xy_velocity_l2_exp(rwd):
     robot_x_velocity = robot_velocity[0]
     robot_x_velocity_target = rwd.env.control_vector[0]
     robot_x_velocity_l2 = np.square(robot_x_velocity - robot_x_velocity_target)
-    robot_x_velocity_l2_exp = np.exp(-robot_x_velocity_l2 * rwd.robot_xy_velocity_alpha)
+    robot_x_velocity_std = max(1, rwd.env.controller.controller.schedule[0]["amp"][int(rwd.env.stage)])
+    robot_x_velocity_l2_exp = np.exp(-robot_x_velocity_l2 / (robot_x_velocity_std**2))
 
     robot_y_velocity = robot_velocity[1]
     robot_y_velocity_target = rwd.env.control_vector[1]
     robot_y_velocity_l2 = np.square(robot_y_velocity - robot_y_velocity_target)
-    robot_y_velocity_l2_exp = np.exp(-robot_y_velocity_l2 * rwd.robot_xy_velocity_alpha)
+    robot_y_velocity_std = max(1, rwd.env.controller.controller.schedule[1]["amp"][int(rwd.env.stage)])
+    robot_y_velocity_l2_exp = np.exp(-robot_y_velocity_l2 / (robot_y_velocity_std**2))
 
     info = {
         "robot_x_velocity": robot_x_velocity,
         "robot_x_velocity_target": robot_x_velocity_target,
         "robot_x_velocity_l2": robot_x_velocity_l2,
+        "robot_x_velocity_std": robot_x_velocity_std,
         "robot_x_velocity_l2_exp": robot_x_velocity_l2_exp,
         "robot_y_velocity": robot_y_velocity,
         "robot_y_velocity_target": robot_y_velocity_target,
         "robot_y_velocity_l2": robot_y_velocity_l2,
+        "robot_y_velocity_std": robot_y_velocity_std,
         "robot_y_velocity_l2_exp": robot_y_velocity_l2_exp
     }
-    return np.mean([robot_x_velocity_l2_exp, robot_y_velocity_l2_exp]), info
+    return np.mean([robot_x_velocity_l2_exp + robot_y_velocity_l2_exp]), info
 
 
 def z_angular_velocity_l2_exp(rwd):
     z_angular_velocity = rwd.env.state_vector()[24]
     z_angular_velocity_target = rwd.env.control_vector[2]
     z_angular_velocity_l2 = np.square(z_angular_velocity - z_angular_velocity_target)
-    z_angular_velocity_l2_exp = np.exp(-z_angular_velocity_l2)
+    z_angular_velocity_std = max(1, rwd.env.controller.controller.schedule[2]["amp"][int(rwd.env.stage)])
+    z_angular_velocity_l2_exp = np.exp(-z_angular_velocity_l2 / (z_angular_velocity_std**2))
 
     info = {
         "z_angular_velocity": z_angular_velocity,
         "z_angular_velocity_target": z_angular_velocity_target,
         "z_angular_velocity_l2": z_angular_velocity_l2,
+        "z_angular_velocity_std": z_angular_velocity_std,
         "z_angular_velocity_l2_exp": z_angular_velocity_l2_exp
     }
     return z_angular_velocity_l2_exp, info
@@ -167,12 +174,14 @@ def xy_angular_gravity_projection(rwd):
     g_vector = rwd.env.model.opt.gravity
     g_z = np.dot(z_unit_vector, g_vector)
     g_xoy = np.sqrt(max(np.sum(np.square(g_vector)) - np.square(g_z), 0.))
+    g_xoy_norm = g_xoy / np.linalg.norm(g_vector)
     
     info = {
         "g_z": g_z,
-        "g_xoy": g_xoy
+        "g_xoy": g_xoy,
+        "g_xoy_norm": g_xoy_norm
     }
-    return g_xoy, info
+    return g_xoy_norm, info
 
 
 def action_change_l2(rwd):
@@ -200,8 +209,8 @@ def hinge_angular_velocity_l2(rwd):
 
 def hinge_position_l2(rwd):
     hinge_position = rwd.env.state_vector()[7:19]
-    hinge_dposition = hinge_position - rwd.hinge_position0
-    hinge_position_l2 = np.mean(np.square(hinge_dposition))
+    hinge_position_l2 = np.mean(np.square(
+        (hinge_position - rwd.hinge_position0) / rwd.hinge_position_std))
 
     info = {
         "hinge_position_l2": hinge_position_l2
@@ -238,12 +247,12 @@ def gait_loop_duration_tanh(rwd):
     info = {}
 
     # get legal gait type
-    x_velocity_control = rwd.env.control_vector[0]
-    if x_velocity_control > 8:
+    velocity_control = np.linalg.norm(rwd.env.control_vector[0:2])
+    if velocity_control > 8:
         gait_target = "gallop"
-    elif x_velocity_control > 6:
+    elif velocity_control > 6:
         gait_target = "canter"
-    elif x_velocity_control > 0:
+    elif velocity_control > 0:
         gait_target = "trot"
     else:
         gait_target = "idle"
@@ -264,8 +273,7 @@ def gait_loop_duration_tanh(rwd):
             else:
                 rwd.gait_loop_options.pop(i) # delete illegal loop 
     else: # loop change or loop continue but hasn't legal loop
-        if gait_target != rwd.gait_type:
-            rwd.gait_type = gait_target
+        rwd.gait_type = gait_target
         # get new gait_loop_options
         rwd.gait_loop_options = []
         for gait_loop in gait_loop_dict[gait_target]: # filt legal loop and add to gait_loop_options
@@ -302,10 +310,8 @@ def feet_state_duration_exp(rwd):
     rwd.feet_state_old = rwd.env._feet_state
 
     if rwd.env.reward.reward_info["in_gait_loop"]:
-        robot_x_velocity = rwd.env.reward.reward_info["robot_x_velocity"]
-        feet_state_duration_exp = np.exp(-np.abs(robot_x_velocity) *
-                                         rwd.feet_state_k *
-                                         rwd.feet_state_duration)
+        velocity_control = np.linalg.norm(rwd.env.control_vector[0:2])
+        feet_state_duration_exp = np.exp(-velocity_control * rwd.feet_state_k * rwd.feet_state_duration)
     else:
         feet_state_duration_exp = 0.
     
