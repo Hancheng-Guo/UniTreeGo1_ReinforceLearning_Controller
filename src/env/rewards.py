@@ -9,9 +9,9 @@ from collections import deque
 fatal_contact = ["trunk", "FR_hip", "FL_hip", "RR_hip", "RL_hip"]
 # x_velocity_control = 0
 idle_loop = [0b1111]
-# x_velocity_control ∈ (0, 2]
-walk_loop = [0b1110, 0b1010, 0b1011, 0b1101, 0b0101, 0b0111]
-# x_velocity_control ∈ (2, 6]
+# # x_velocity_control ∈ (0, 2]
+# walk_loop = [0b1110, 0b1010, 0b1011, 0b1101, 0b0101, 0b0111]
+# x_velocity_control ∈ (0, 6]
 trot_loop = [0b1001, 0b0110]
 # x_velocity_control ∈ (6, 8]
 canter_loop_A = [0b1110, 0b1000, 0b0000, 0b0001, 0b0111, 0b0110]
@@ -22,7 +22,6 @@ gallop_loop_B = [0b0100, 0b1100, 0b1000, 0b0000, 0b0001, 0b0011, 0b0010, 0b0000]
 
 gait_loop_dict = {
     "idle": [idle_loop],
-    "walk": [walk_loop],
     "trot": [trot_loop],
     "canter": [canter_loop_A, canter_loop_B],
     "gallop": [gallop_loop_A, gallop_loop_B],
@@ -69,21 +68,22 @@ def is_alive(rwd):
     
     return True, {"is_alive": True}
 
-def illegal_contact(rwd):
-    illegal_contact_sum = 0
+
+def illegal_contact_l1(rwd):
+    illegal_contact_l1 = 0.
     for c in rwd.env.data.contact:
         illegal_touching = (
             (c.geom1 not in rwd.env._foot_ids and c.geom2 == rwd.env._floor_id) or
             (c.geom1 == rwd.env._floor_id and c.geom2 not in rwd.env._foot_ids))
-        illegal_contact_sum += 1 if illegal_touching else 0
+        illegal_contact_l1 += 1 if illegal_touching else 0
     
     info = {
-        "illegal_contact_sum": illegal_contact_sum
+        "illegal_contact_l1": illegal_contact_l1
     }
-    return illegal_contact_sum, info
+    return illegal_contact_l1, info
 
 
-def robot_xy_velocity_mse_exp(rwd):
+def robot_xy_velocity_l2_exp(rwd):
     R_rotate = get_rotation_matrix(rwd.env.state_vector()[3:7])
     y_velocity = rwd.env.state_vector()[20]
     x_velocity = rwd.env.state_vector()[19]
@@ -91,163 +91,169 @@ def robot_xy_velocity_mse_exp(rwd):
 
     robot_x_velocity = robot_velocity[0]
     robot_x_velocity_target = rwd.env.control_vector[0]
-    robot_x_velocity_mse = np.mean(np.square(robot_x_velocity - robot_x_velocity_target))
-    robot_x_velocity_mse_exp = np.exp(-robot_x_velocity_mse)
+    robot_x_velocity_l2 = np.square(robot_x_velocity - robot_x_velocity_target)
+    robot_x_velocity_std = max(1, rwd.env.controller.controller.schedule[0]["amp"][int(rwd.env.stage)])
+    robot_x_velocity_l2_exp = np.exp(-robot_x_velocity_l2 / (robot_x_velocity_std**2))
 
     robot_y_velocity = robot_velocity[1]
     robot_y_velocity_target = rwd.env.control_vector[1]
-    robot_y_velocity_mse = np.mean(np.square(robot_y_velocity - robot_y_velocity_target))
-    robot_y_velocity_mse_exp = np.exp(-robot_y_velocity_mse)
+    robot_y_velocity_l2 = np.square(robot_y_velocity - robot_y_velocity_target)
+    robot_y_velocity_std = max(1, rwd.env.controller.controller.schedule[1]["amp"][int(rwd.env.stage)])
+    robot_y_velocity_l2_exp = np.exp(-robot_y_velocity_l2 / (robot_y_velocity_std**2))
 
     info = {
         "robot_x_velocity": robot_x_velocity,
         "robot_x_velocity_target": robot_x_velocity_target,
-        "robot_x_velocity_mse": robot_x_velocity_mse,
-        "robot_x_velocity_mse_exp": robot_x_velocity_mse_exp,
+        "robot_x_velocity_l2": robot_x_velocity_l2,
+        "robot_x_velocity_std": robot_x_velocity_std,
+        "robot_x_velocity_l2_exp": robot_x_velocity_l2_exp,
         "robot_y_velocity": robot_y_velocity,
         "robot_y_velocity_target": robot_y_velocity_target,
-        "robot_y_velocity_mse": robot_y_velocity_mse,
-        "robot_y_velocity_mse_exp": robot_y_velocity_mse_exp
+        "robot_y_velocity_l2": robot_y_velocity_l2,
+        "robot_y_velocity_std": robot_y_velocity_std,
+        "robot_y_velocity_l2_exp": robot_y_velocity_l2_exp
     }
-    return np.mean([robot_x_velocity_mse_exp, robot_y_velocity_mse_exp]), info
+    return np.mean([robot_x_velocity_l2_exp + robot_y_velocity_l2_exp]), info
 
 
-def z_angular_velocity_mse_exp(rwd):
+def z_angular_velocity_l2_exp(rwd):
     z_angular_velocity = rwd.env.state_vector()[24]
     z_angular_velocity_target = rwd.env.control_vector[2]
-    z_angular_velocity_mse = np.mean(np.square(z_angular_velocity - z_angular_velocity_target))
-    z_angular_velocity_mse_exp = np.exp(-z_angular_velocity_mse)
+    z_angular_velocity_l2 = np.square(z_angular_velocity - z_angular_velocity_target)
+    z_angular_velocity_std = max(1, rwd.env.controller.controller.schedule[2]["amp"][int(rwd.env.stage)])
+    z_angular_velocity_l2_exp = np.exp(-z_angular_velocity_l2 / (z_angular_velocity_std**2))
 
     info = {
         "z_angular_velocity": z_angular_velocity,
         "z_angular_velocity_target": z_angular_velocity_target,
-        "z_angular_velocity_mse": z_angular_velocity_mse,
-        "z_angular_velocity_mse_exp": z_angular_velocity_mse_exp
+        "z_angular_velocity_l2": z_angular_velocity_l2,
+        "z_angular_velocity_std": z_angular_velocity_std,
+        "z_angular_velocity_l2_exp": z_angular_velocity_l2_exp
     }
-    return z_angular_velocity_mse_exp, info
+    return z_angular_velocity_l2_exp, info
 
 
-def z_velocity_ms(rwd):
+def z_velocity_l2(rwd):
     z_velocity = rwd.env.state_vector()[21]
-    z_velocity_ml = np.mean(np.square(z_velocity))
+    z_velocity_l2 = np.square(z_velocity)
 
     info = {
         "z_velocity": z_velocity,
-        "z_velocity_ml": z_velocity_ml
+        "z_velocity_l2": z_velocity_l2
     }
-    return z_velocity_ml, info
+    return z_velocity_l2, info
 
 
-def z_position_mse(rwd):
+def z_position_l2(rwd):
     z_position = rwd.env.data.body(rwd.env._main_body).xpos[2]
-    z_position_mse = np.mean(np.square(z_position - rwd.z_position_target))
+    z_position_l2 = np.square(z_position - rwd.z_position_target)
 
     info = {
         "z_position": z_position,
-        "z_position_mse": z_position_mse
+        "z_position_l2": z_position_l2
     }
-    return z_position_mse, info
+    return z_position_l2, info
 
 
-def xy_angular_velocity_ms(rwd):
+def xy_angular_velocity_l2(rwd):
     x_angular_velocity = rwd.env.state_vector()[22]
     y_angular_velocity = rwd.env.state_vector()[23]
-    xy_angular_velocity_ms = np.mean(np.square([x_angular_velocity, y_angular_velocity]))
+    xy_angular_velocity_l2 = np.mean(np.square([x_angular_velocity, y_angular_velocity]))
 
     info = {
         "x_angular_velocity": x_angular_velocity,
         "y_angular_velocity": y_angular_velocity,
-        "xy_angular_velocity_ms": xy_angular_velocity_ms
+        "xy_angular_velocity_l2": xy_angular_velocity_l2
     }
-    return xy_angular_velocity_ms, info
+    return xy_angular_velocity_l2, info
 
 
-def xy_angular_ms(rwd):
+def xy_angular_gravity_projection(rwd):
     R_rotate = get_rotation_matrix(rwd.env.state_vector()[3:7])
     z_unit_vector = R_rotate[:,2]
     g_vector = rwd.env.model.opt.gravity
     g_z = np.dot(z_unit_vector, g_vector)
     g_xoy = np.sqrt(max(np.sum(np.square(g_vector)) - np.square(g_z), 0.))
+    g_xoy_norm = g_xoy / np.linalg.norm(g_vector)
     
     info = {
         "g_z": g_z,
-        "g_xoy": g_xoy
+        "g_xoy": g_xoy,
+        "g_xoy_norm": g_xoy_norm
     }
-    return g_xoy, info
+    return g_xoy_norm, info
 
 
-def action_change_ms(rwd):
+def action_change_l2(rwd):
     if rwd.env.action_old is None:
-        return 0., {"action_change_ms": 0.}
+        return 0., {"action_change_l2": 0.}
     
     action_change = rwd.env.action - rwd.env.action_old
-    action_change_ms = np.mean(np.square(action_change))
+    action_change_l2 = np.mean(np.square(action_change))
 
     info = {
-        "action_change_ms": action_change_ms
+        "action_change_l2": action_change_l2
     }
-    return action_change_ms, info
+    return action_change_l2, info
 
 
-def hinge_angular_velocity_ms(rwd):
+def hinge_angular_velocity_l2(rwd):
     hinge_angular_velocity = rwd.env.state_vector()[25:37]
-    hinge_angular_velocity_ms = np.mean(np.square(hinge_angular_velocity))
+    hinge_angular_velocity_l2 = np.mean(np.square(hinge_angular_velocity))
 
     info = {
-        "hinge_angular_velocity_ms": hinge_angular_velocity_ms
+        "hinge_angular_velocity_l2": hinge_angular_velocity_l2
     }
-    return hinge_angular_velocity_ms, info
+    return hinge_angular_velocity_l2, info
 
 
-def hinge_position_mse(rwd):
+def hinge_position_l2(rwd):
     hinge_position = rwd.env.state_vector()[7:19]
-    hinge_dposition = hinge_position - rwd.hinge_position0
-    hinge_position_mse = np.mean(np.square(hinge_dposition))
+    hinge_position_l2 = np.mean(np.square(
+        (hinge_position - rwd.hinge_position0) / rwd.hinge_position_std))
 
     info = {
-        "hinge_position_mse": hinge_position_mse
+        "hinge_position_l2": hinge_position_l2
     }
-    return hinge_position_mse, info
+    return hinge_position_l2, info
 
 
-def hinge_exceed_limit_sum(rwd):
+def hinge_exceed_limit_l1(rwd):
     hinge_position = rwd.env.state_vector()[7:19]
     hinge_exceed_upper_limit = np.clip(hinge_position - rwd.hinge_upper_limit, 0., None) 
     hinge_exceed_lower_limit = np.clip(rwd.hinge_lower_limit - hinge_position, 0., None)
-    hinge_exceed_limit_sum = np.sum([hinge_exceed_upper_limit, hinge_exceed_lower_limit])
+    hinge_exceed_limit_l1 = np.sum([hinge_exceed_upper_limit, hinge_exceed_lower_limit])
 
     info = {
         "hinge_exceed_upper_limit": hinge_exceed_upper_limit,
         "hinge_exceed_lower_limit": hinge_exceed_lower_limit,
-        "hinge_exceed_limit_sum": hinge_exceed_limit_sum
+        "hinge_exceed_limit_l1": hinge_exceed_limit_l1
     }
-    return hinge_exceed_limit_sum, info
+    return hinge_exceed_limit_l1, info
 
 
-def hinge_energy_sum(rwd):
+def hinge_energy_l1(rwd):
     hinge_force = rwd.env.data.qfrc_actuator[6:19]
     hinge_angular_velocity = rwd.env.state_vector()[25:37]
-    hinge_energy = np.sum(np.abs(hinge_force * hinge_angular_velocity))
+    hinge_energy_l1 = np.sum(np.abs(hinge_force * hinge_angular_velocity))
     
     info = {
-        "hinge_energy_sum": hinge_energy
+        "hinge_energy_l1": hinge_energy_l1
     }
-    return hinge_energy, info
+    return hinge_energy_l1, info
 
 
-def gait_loop_tanh(rwd):
+def gait_loop_duration_tanh(rwd):
     info = {}
 
     # get legal gait type
-    x_velocity_control = rwd.env.control_vector[0]
-    if x_velocity_control > 8:
+    velocity_control = np.linalg.norm(rwd.env.control_vector[0:2])
+    if velocity_control > 8:
         gait_target = "gallop"
-    elif x_velocity_control > 6:
+    elif velocity_control > 6:
         gait_target = "canter"
-    elif x_velocity_control > 2:
+    elif velocity_control > 0:
         gait_target = "trot"
-    elif x_velocity_control > 0:
-        gait_target = "walk"
     else:
         gait_target = "idle"
     info["gait_target"] = gait_target
@@ -267,8 +273,7 @@ def gait_loop_tanh(rwd):
             else:
                 rwd.gait_loop_options.pop(i) # delete illegal loop 
     else: # loop change or loop continue but hasn't legal loop
-        if gait_target != rwd.gait_type:
-            rwd.gait_type = gait_target
+        rwd.gait_type = gait_target
         # get new gait_loop_options
         rwd.gait_loop_options = []
         for gait_loop in gait_loop_dict[gait_target]: # filt legal loop and add to gait_loop_options
@@ -291,13 +296,33 @@ def gait_loop_tanh(rwd):
     info["gait_loop_duration"] = rwd.gait_loop_duration
 
     # calculate reward
-    gait_loop_tanh = np.tanh(rwd.gait_loop_k * rwd.gait_loop_duration)
-    info["gait_loop_tanh"] = gait_loop_tanh
+    gait_loop_duration_tanh = np.tanh(rwd.gait_loop_k * rwd.gait_loop_duration)
+    info["gait_loop_duration_tanh"] = gait_loop_duration_tanh
 
-    return gait_loop_tanh, info
+    return gait_loop_duration_tanh, info
 
 
-def foot_sliding_velocity_ms(rwd):
+def feet_state_duration_exp(rwd):
+    if rwd.env._feet_state == rwd.feet_state_old:
+        rwd.feet_state_duration += 1 
+    else:
+        rwd.feet_state_duration = 0
+    rwd.feet_state_old = rwd.env._feet_state
+
+    if rwd.env.reward.reward_info["in_gait_loop"]:
+        velocity_control = np.linalg.norm(rwd.env.control_vector[0:2])
+        feet_state_duration_exp = np.exp(-velocity_control * rwd.feet_state_k * rwd.feet_state_duration)
+    else:
+        feet_state_duration_exp = 0.
+    
+    info = {
+        "feet_state_duration": rwd.feet_state_duration,
+        "feet_state_duration_exp": feet_state_duration_exp
+    }
+    return feet_state_duration_exp, info
+
+
+def foot_sliding_velocity_l2(rwd):
     are_feet_landed = np.array(rwd.env._are_feet_touching_ground)
     foot_sliding_velocity = np.zeros(len(are_feet_landed))
     for i, foot_id in enumerate(rwd.env._foot_ids):
@@ -306,26 +331,26 @@ def foot_sliding_velocity_ms(rwd):
             mujoco.mj_objectVelocity(rwd.env.model, rwd.env.data, mujoco.mjtObj.mjOBJ_GEOM,
                                      foot_id, vel, 0)
             foot_sliding_velocity[i] = np.sqrt(np.sum(np.square(vel[3:5])))
-    foot_sliding_velocity_ms = np.mean(np.square(foot_sliding_velocity))
+    foot_sliding_velocity_l2 = np.mean(np.square(foot_sliding_velocity))
 
     info = {
-        "feet_sliding_velocity": foot_sliding_velocity,
-        "foot_sliding_velocity_ms": foot_sliding_velocity_ms
+        "foot_sliding_velocity": foot_sliding_velocity,
+        "foot_sliding_velocity_l2": foot_sliding_velocity_l2
     }
-    return foot_sliding_velocity_ms, info
+    return foot_sliding_velocity_l2, info
 
 
-def foot_lift_height_mse_exp_xy_vel_weighted(rwd):
+def foot_lift_height_l2_exp_xy_vel_weighted(rwd):
     if rwd.env.reward.reward_info["in_gait_loop"]:
         are_feet_lifted = np.logical_not(np.array(rwd.env._are_feet_touching_ground))
         lifted_foot_ids = [foot_id for foot_id in np.array(rwd.env._foot_ids)[are_feet_lifted]]
         if len(lifted_foot_ids) == 0:
-            return 0., {"lift_foot_xy_velocity": [],
-                "foot_lift_height_mse_exp_xy_vel_weighted": 0.}
+            return 0., {"foot_lift_xy_velocity": [],
+                        "foot_lift_height_l2_exp_xy_vel_weighted": 0.}
         
         foot_lift_height = rwd.env.data.geom_xpos[lifted_foot_ids][:,2]
-        foot_lift_height_mse = np.square(foot_lift_height - rwd.foot_lift_height_target)
-        foot_lift_height_mse_exp = np.exp(-foot_lift_height_mse)
+        foot_lift_height_l2 = np.square(foot_lift_height - rwd.foot_lift_height_target)
+        foot_lift_height_l2_exp = np.exp(-foot_lift_height_l2)
 
         foot_xy_velocity = np.zeros(len(lifted_foot_ids))
         for i, foot_id in enumerate(lifted_foot_ids):
@@ -335,15 +360,15 @@ def foot_lift_height_mse_exp_xy_vel_weighted(rwd):
                                         foot_id, vel, 0)
                 foot_xy_velocity[i] = np.sqrt(np.sum(np.square(vel[3:5])))
 
-        foot_lift_height_mse_exp_xy_vel_weighted = np.mean(foot_lift_height_mse_exp * foot_xy_velocity)
+        foot_lift_height_l2_exp_xy_vel_weighted = np.mean(foot_lift_height_l2_exp * foot_xy_velocity)
 
         info = {
-            "lift_foot_xy_velocity": foot_xy_velocity,
-            "foot_lift_height_mse_exp_xy_vel_weighted": foot_lift_height_mse_exp_xy_vel_weighted
+            "foot_lift_xy_velocity": foot_xy_velocity,
+            "foot_lift_height_l2_exp_xy_vel_weighted": foot_lift_height_l2_exp_xy_vel_weighted
         }
-        return foot_lift_height_mse_exp_xy_vel_weighted, info
+        return foot_lift_height_l2_exp_xy_vel_weighted, info
 
-    return 0., {"lift_foot_xy_velocity": [],
-                "foot_lift_height_mse_exp_xy_vel_weighted": 0.}
+    return 0., {"foot_lift_xy_velocity": [],
+                "foot_lift_height_l2_exp_xy_vel_weighted": 0.}
 
 # endregion
