@@ -60,7 +60,7 @@ reward:
   foot_sliding_velocity_weight: -0.2
   foot_lift_height_weight: 1.0
 
-  z_position_target: 0.27
+  z_position_target: 0.3
   hinge_position_std: 0.2
   hinge_exceed_limit_ratio: 0.95
   gait_loop_k: 0.25

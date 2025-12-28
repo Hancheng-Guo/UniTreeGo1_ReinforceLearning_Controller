@@ -13,6 +13,20 @@ def z_velocity_l2(rwd):
     return z_velocity_l2, info
 
 
+def z_velocity_l2_xy_vel_weighted(rwd):
+    z_velocity = rwd.env.state_vector()[21]
+    z_velocity_l2 = np.square(z_velocity)
+    xy_velocity = np.linalg.norm(rwd.env.state_vector()[19:21])
+    z_velocity_l2_xy_vel_weighted = z_velocity_l2 / max(0.5, xy_velocity)
+
+    info = {
+        "z_velocity": z_velocity,
+        "z_velocity_l2": z_velocity_l2,
+        "z_velocity_l2_xy_vel_weighted": z_velocity_l2_xy_vel_weighted
+    }
+    return z_velocity_l2_xy_vel_weighted, info
+
+
 def z_position_l2(rwd):
     z_position = rwd.env.data.body(rwd.env._main_body).xpos[2]
     z_position_l2 = np.square(z_position - rwd.z_position_target)
@@ -22,6 +36,20 @@ def z_position_l2(rwd):
         "z_position_l2": z_position_l2
     }
     return z_position_l2, info
+
+
+def z_position_l2_xy_vel_weighted(rwd):
+    z_position = rwd.env.data.body(rwd.env._main_body).xpos[2]
+    z_position_l2 = np.square(z_position - rwd.z_position_target)
+    xy_velocity = np.linalg.norm(rwd.env.state_vector()[19:21])
+    z_position_l2_xy_vel_weighted = z_position_l2 / max(0.5, xy_velocity)
+
+    info = {
+        "z_position": z_position,
+        "z_position_l2": z_position_l2,
+        "z_position_l2_xy_vel_weighted": z_position_l2_xy_vel_weighted
+    }
+    return z_position_l2_xy_vel_weighted, info
 
 
 def xy_angular_velocity_l2(rwd):
