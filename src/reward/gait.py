@@ -6,7 +6,7 @@ from src.reward.common.get_foot_state import get_foot_state
 
 # x_velocity_control = 0
 idle_loop = [{"state": 0b1111, "step": 0},]
-# x_velocity_control ∈ (0, 6]
+# x_velocity_control ∈ (0, 4]
 trot_loop = [{"state": 0b1111, "step": 2},
              {"state": 0b1011, "step": 1},
              {"state": 0b1001, "step": 4},
@@ -15,7 +15,7 @@ trot_loop = [{"state": 0b1111, "step": 2},
              {"state": 0b0111, "step": 1},
              {"state": 0b0110, "step": 4},
              {"state": 0b1110, "step": 3},]
-# x_velocity_control ∈ (6, 8]
+# x_velocity_control ∈ (4, 8]
 canter_loop_A = [{"state": 0b1110, "step": 2},
                  {"state": 0b1100, "step": 1},
                  {"state": 0b1000, "step": 1},
@@ -64,7 +64,7 @@ def gait_loop_duration_tanh(rwd):
     velocity_control = np.linalg.norm(rwd.env.control_vector[0:2])
     if velocity_control > 8:
         gait_target = "gallop"
-    elif velocity_control > 6:
+    elif velocity_control > 4:
         gait_target = "canter"
     elif velocity_control > 0:
         gait_target = "trot"
