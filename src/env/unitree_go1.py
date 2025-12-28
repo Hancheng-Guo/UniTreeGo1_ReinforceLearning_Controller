@@ -6,7 +6,7 @@ from gymnasium.envs.mujoco.ant_v5 import AntEnv
 
 import src.reward.base as rwd
 from src.reward.base import NewReward
-from src.control.base import UniTreeGo1ControlGenerator, UniTreeGo1ControlROS
+from src.control.base import UniTreeGo1ControlGenerator, UniTreeGo1ControlUDP
 from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
 
@@ -133,8 +133,8 @@ class UniTreeGo1Env(AntEnv):
 class UniTreeGo1Control:
     def __init__(self, env, control_config):
         self.env = env
-        if control_config["control_type"] == "ros":
-            self.controller = UniTreeGo1ControlROS(self.env, **control_config)
+        if control_config["control_type"] == "udp":
+            self.controller = UniTreeGo1ControlUDP(self.env, **control_config)
         else:
             self.controller = UniTreeGo1ControlGenerator(self.env, **control_config)
     

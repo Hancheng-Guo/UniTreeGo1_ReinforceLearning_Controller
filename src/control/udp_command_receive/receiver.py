@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class UniTreeGo1ControlROS:
+class UniTreeGo1ControlUDP:
     def __init__(self, env, **kwargs):
         self.env = env
 
