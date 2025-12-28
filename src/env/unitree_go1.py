@@ -25,6 +25,7 @@ class UniTreeGo1Env(AntEnv):
             include_cfrc_ext_in_observation: bool = True,
 
             render_mode: str = None,
+            plt_n_cols:  int = 4,
             plt_n_lines: int = 1,
             plt_x_range: int = 200,
             width: int = 480,
@@ -58,6 +59,7 @@ class UniTreeGo1Env(AntEnv):
         # for demo
         self.render_mode = render_mode
         self.callbacks = [CustomMatPlotLibCallback(render_mode,
+                                                   plt_n_cols=plt_n_cols,
                                                    plt_n_lines=plt_n_lines,
                                                    plt_x_range=plt_x_range),
                           CustomMujocoCallback(render_mode),]

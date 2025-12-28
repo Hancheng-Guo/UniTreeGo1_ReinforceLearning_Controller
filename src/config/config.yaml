@@ -13,6 +13,7 @@ demo:
   camera_xyaxes: "1 0 0 0 1 1"
   mjc_render_width: 150
   mjc_render_height: 150
+  plt_n_cols: 3
   plt_n_lines: 1
   plt_x_range: 100
 

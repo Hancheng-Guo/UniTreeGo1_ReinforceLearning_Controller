@@ -6,17 +6,15 @@ from PIL import Image
 
 def plt_select_kwargs(state, info):
     selected_kwargs = {
-        "x_velocity": {"value": info.get("x_velocity"), "needs_unwrap": False},
-        "x_velocity_target": {"value": info.get("x_velocity_target"), "needs_unwrap": False},
-        "y_velocity": {"value": info.get("y_velocity"), "needs_unwrap": False},
-        "y_velocity_target": {"value": info.get("y_velocity_target"), "needs_unwrap": False},
-        "x_velocity_reward": {"value": info.get("x_velocity_reward"), "needs_unwrap": False},
-        "y_velocity_reward": {"value": info.get("y_velocity_reward"), "needs_unwrap": False},
-        "z_velocity_reward": {"value": info.get("z_velocity_reward"), "needs_unwrap": False},
-        "z_position_reward": {"value": info.get("z_position_reward"), "needs_unwrap": False},
-        "xy_angular_velocity_reward": {"value": info.get("xy_angular_velocity_reward"), "needs_unwrap": False},
-        "xy_angular_reward": {"value": info.get("xy_angular_reward"), "needs_unwrap": False},
-        "gait_loop_reward": {"value": info.get("gait_loop_reward"), "needs_unwrap": False},
+        "x_vel": {"value": info.get("robot_x_velocity"), "needs_unwrap": False},
+        "y_vel": {"value": info.get("robot_y_velocity"), "needs_unwrap": False},
+        "z_angular_vel": {"value": info.get("z_angular_velocity"), "needs_unwrap": False},
+        "x_vel_tar": {"value": info.get("robot_x_velocity_target"), "needs_unwrap": False},
+        "y_vel_tar": {"value": info.get("robot_y_velocity_target"), "needs_unwrap": False},
+        "z_angular_vel_tar": {"value": info.get("z_angular_velocity_target"), "needs_unwrap": False},
+        "gait_loop_tanh": {"value": info.get("gait_loop_duration_tanh"), "needs_unwrap": False},
+        "foot_state_exp": {"value": info.get("foot_state_duration_exp"), "needs_unwrap": False},
+        "hinge_energy": {"value": info.get("hinge_energy_l1"), "needs_unwrap": False},
         }
     return selected_kwargs
 
@@ -24,28 +22,23 @@ def plt_select_kwargs(state, info):
 class CustomMatPlotLibCallback():
     def __init__(self,
                  render_mode,
-                 plt_max_col=4,
-                 font_size=7,
-                 title_size=8.4,
-                 label_size=8.4,
-                 xlabel_size=7,
-                 ylabel_size: float = 7.,
+                 plt_n_cols: int = 4,
                  plt_n_lines: int = 1,
                  plt_x_range: int = 200,
                  ):
         # set plt
         self.render_mode = render_mode
-        plt.rcParams["font.size"] = font_size
-        plt.rcParams["axes.titlesize"] = title_size
-        plt.rcParams["axes.labelsize"] = label_size
-        plt.rcParams["xtick.labelsize"] = xlabel_size
-        plt.rcParams["ytick.labelsize"] = ylabel_size
+        plt.rcParams["font.size"] = 7.
+        plt.rcParams["axes.titlesize"] = 8.4
+        plt.rcParams["axes.labelsize"] = 8.4
+        plt.rcParams["xtick.labelsize"] = 7.
+        plt.rcParams["ytick.labelsize"] = 7.
         if render_mode == "human":
             plt.ion()
         # set fig and axes
         selected_kwargs = plt_select_kwargs([],{})
         self.subfigs = len(selected_kwargs)
-        self.cols = min(plt_max_col, self.subfigs)
+        self.cols = min(plt_n_cols, self.subfigs)
         self.rows = math.ceil(self.subfigs / self.cols)
         self.fig, self.plt_axes = plt.subplots(self.rows, self.cols, figsize=(1.25*self.cols, 1.25*self.rows)) # default figsize=(6.4, 4.8)
         self.plt_axes = self.plt_axes.flatten()

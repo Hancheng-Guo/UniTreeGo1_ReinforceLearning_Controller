@@ -21,6 +21,7 @@ def make_gym_env(config, *args, **kwargs):
     kwargs["reset_noise_scale"] = config["train"]["reset_noise_scale"]
     kwargs["max_episode_steps"] = config["train"]["max_episode_steps"]
 
+    kwargs["plt_n_cols"]  = config["demo"]["plt_n_cols"]
     kwargs["plt_n_lines"] = config["demo"]["plt_n_lines"]
     kwargs["plt_x_range"] = config["demo"]["plt_x_range"]
     if not config["is"]["model_camera_modified"]:
