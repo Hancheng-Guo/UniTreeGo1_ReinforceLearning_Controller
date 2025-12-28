@@ -13,19 +13,20 @@ demo:
   camera_xyaxes: "1 0 0 0 1 1"
   mjc_render_width: 150
   mjc_render_height: 150
+  plt_n_cols: 3
   plt_n_lines: 1
   plt_x_range: 100
 
 control:
   control_type: "generate"
   generator_theta: 1.0
-  generator_smooth_order: 20
+  generator_smooth_order: 8
   generator_schedule: [
     {
       "name": "robot_x_velocity",
       "clip": [0.0, 10.0],
-      "avg": [0.0, 2.0, 3.0, 2.0, 6.0, 3.0, 7.0, 3.0, 3.0],
-      "amp": [0.0, 0.0, 0.0, 4.0, 2.0, 5.0, 3.0, 7.0, 7.0],
+      "avg": [0.0, 2.0, 2.0, 1.5, 6.0, 3.0, 9.0, 5.0, 5.0],
+      "amp": [0.0, 0.0, 2.0, 2.5, 2.0, 5.0, 1.0, 7.0, 7.0],
     },
     {
       "name": "robot_y_velocity",
@@ -37,7 +38,7 @@ control:
       "name": "z_angular_velocity",
       "clip": [-3.14, 3.14],
       "avg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-      "amp": [0.0, 0.0, 0.2, 0.5, 1.0, 1.0, 1.5, 1.5, 1.5],
+      "amp": [0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.5, 1.5, 1.5],
     },
   ]
 
@@ -56,15 +57,15 @@ reward:
   hinge_exceed_limit_weight: -5.0
   hinge_energy_weight: -2.0e-5
   gait_loop_weight: 1.0
-  feet_state_duration_weight: 1.0
+  foot_state_duration_weight: 1.0
   foot_sliding_velocity_weight: -0.2
   foot_lift_height_weight: 1.0
 
-  z_position_target: 0.27
+  z_position_target: 0.3
   hinge_position_std: 0.2
   hinge_exceed_limit_ratio: 0.95
   gait_loop_k: 0.25
-  feet_state_k: 0.05
+  foot_state_k: 0.05
   foot_lift_height_target: 0.1
 
 algorithm:

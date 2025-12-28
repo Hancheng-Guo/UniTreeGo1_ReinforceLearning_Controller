@@ -1,0 +1,137 @@
+import os
+import shutil
+import subprocess
+import threading
+from stable_baselines3.common.callbacks import BaseCallback
+from torch.utils.tensorboard import SummaryWriter
+
+
+target_items = {
+    "stage": 0,
+    "alive_reward": 0,
+    "illegal_contact_penalty": 0,
+    "robot_xy_velocity_reward": 0,
+    "robot_x_velocity_l2_exp": 0,
+    "robot_y_velocity_l2_exp": 0,
+    "z_angular_velocity_l2_exp": 0,
+    "z_angular_velocity_reward": 0,
+    "z_velocity_penalty": 0,
+    "z_position_penalty": 0,
+    "xy_angular_velocity_penalty": 0,
+    "xy_angular_penalty": 0,
+    "action_change_penalty": 0,
+    "hinge_angular_velocity_penalty": 0,
+    "hinge_position_penalty": 0,
+    "hinge_exceed_limit_penalty": 0,
+    "hinge_energy_penalty": 0,
+    "gait_loop_reward": 0,
+    "foot_state_duration_reward": 0,
+    "foot_sliding_velocity_penalty": 0,
+    "foot_lift_height_reward": 0,
+}
+
+
+class ThreadTensorBoard(): 
+    def __init__(self,
+                 log_path: str = ".",):
+        self.log_path = log_path
+        self.thread = None
+        self.process = None
+
+    def _reader(self, pipe):
+        with pipe:
+            for line in iter(pipe.readline, b""):
+                print("[TensorBoard]", line.decode().rstrip())
+
+    def _run(self):
+        process = subprocess.Popen(
+            "tensorboard --logdir " + self.log_path + " --bind_all",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            )
+        threading.Thread(target=self._reader, args=(process.stdout,), daemon=True).start()
+        threading.Thread(target=self._reader, args=(process.stderr,), daemon=True).start()
+        self.process = process
+
+    def run(self):
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+
+    def stop(self):
+        if self.process.poll() is None:
+            self.process.terminate()
+        self.thread = None
+        self.process = None
+        print("TensorBoard stopped")
+
+
+class CustomTensorboardCallback(BaseCallback):
+    def __init__(self,
+                 log_freq: int = 2048,
+                 verbose=0,
+                 **kwargs):
+        super().__init__(verbose)
+        self.writer = None
+        self.log_freq = log_freq
+        self.rollout_index = None
+        self.data = None
+
+    def _on_training_start(self) -> bool:
+        self.writer = [SummaryWriter(os.path.join(self.logger.dir,  f"env_{env_id}"))
+                       for env_id in range(self.model.n_envs)]
+        self.log_freq = min((-self.log_freq % self.model.n_envs) + self.log_freq,
+                            self.model.n_envs * self.model.n_steps)
+        return True
+    
+    def _on_rollout_start(self) -> bool:
+        self.rollout_index = self.num_timesteps
+        self._data_reset()
+        # self._data_split()
+        return True
+
+    def _on_step(self) -> bool:
+        infos = self.locals["infos"]
+        for env_id in range(self.model.n_envs):
+            for key, _ in target_items.items():
+                self.data[env_id][key] += infos[env_id][key]
+
+        timesteps_past = self.num_timesteps - self.rollout_index
+        if (timesteps_past % self.log_freq == 0) and (timesteps_past != 0):
+            self._data_dump()
+            self._data_reset()
+        return True
+
+    def _on_training_end(self):
+        self._data_split(step_shift=1)
+        for env_id in range(self.model.n_envs):
+            self.writer[env_id].close()
+            files = os.listdir(os.path.join(self.logger.dir, f"env_{env_id}"))
+            for file in files:
+                shutil.move(os.path.join(self.logger.dir, f"env_{env_id}", file), self.logger.dir)
+            shutil.rmtree(os.path.join(self.logger.dir, f"env_{env_id}"))
+        return True
+    
+    def _tb_log_name(self, key, suffix):
+        return f"custom/{key}_{suffix}"
+    
+    def _data_reset(self):
+        self.data = [{key: value for key, value in target_items.items()}
+                     for _ in range(self.model.n_envs)]
+
+    def _data_dump(self):
+        for env_id in range(self.model.n_envs):
+            for key, _ in target_items.items():
+                self.writer[env_id].add_scalar(
+                    self._tb_log_name(key, "mean"),
+                    self.data[env_id][key] / self.log_freq * self.model.n_envs,
+                    self.num_timesteps)
+        self.writer[env_id].flush()
+                
+    def _data_split(self, step_shift=0):
+        for env_id in range(self.model.n_envs):
+            for key, _ in target_items.items():
+                self.writer[env_id].add_scalar(
+                    self._tb_log_name(key, "mean"),
+                    float("inf"),
+                    self.num_timesteps + step_shift)
+        self.writer[env_id].flush()
