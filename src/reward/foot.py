@@ -1,6 +1,5 @@
 import mujoco
 import numpy as np
-from src.reward.gait import in_gait_loop
 from src.reward.common.get_foot_state import are_foot_touching_ground, get_foot_state
 
 
@@ -11,9 +10,9 @@ def foot_state_duration_exp(rwd):
         rwd.foot_state_duration = 0
     rwd.foot_state_old = get_foot_state(rwd.env)
 
-    if in_gait_loop:
+    if rwd.env.reward.rewards["gait_loop"].gait_loop_duration > 0:
         velocity_control = np.linalg.norm(rwd.env.control_vector[0:2])
-        foot_state_duration_exp = np.exp(-velocity_control * rwd.feet_state_k * rwd.foot_state_duration)
+        foot_state_duration_exp = np.exp(-velocity_control * rwd.foot_state_k * rwd.foot_state_duration)
     else:
         foot_state_duration_exp = 0.
     
@@ -43,9 +42,9 @@ def foot_sliding_velocity_l2(rwd):
 
 
 def foot_lift_height_l2_exp_xy_vel_weighted(rwd):
-    if in_gait_loop:
-        are_feet_lifted = np.logical_not(np.array(rwd.env._are_feet_touching_ground))
-        lifted_foot_ids = [foot_id for foot_id in np.array(rwd.env._foot_ids)[are_feet_lifted]]
+    if rwd.env.reward.rewards["gait_loop"].gait_loop_duration > 0:
+        are_foot_lifted = np.logical_not(np.array(are_foot_touching_ground(rwd.env)))
+        lifted_foot_ids = [foot_id for foot_id in np.array(rwd.env._foot_ids)[are_foot_lifted]]
         if len(lifted_foot_ids) == 0:
             return 0., {"foot_lift_xy_velocity": [],
                         "foot_lift_height_l2_exp_xy_vel_weighted": 0.}
@@ -56,7 +55,7 @@ def foot_lift_height_l2_exp_xy_vel_weighted(rwd):
 
         foot_xy_velocity = np.zeros(len(lifted_foot_ids))
         for i, foot_id in enumerate(lifted_foot_ids):
-            if are_feet_lifted[i]:
+            if are_foot_lifted[i]:
                 vel = np.zeros(6)
                 mujoco.mj_objectVelocity(rwd.env.model, rwd.env.data, mujoco.mjtObj.mjOBJ_GEOM,
                                         foot_id, vel, 0)
