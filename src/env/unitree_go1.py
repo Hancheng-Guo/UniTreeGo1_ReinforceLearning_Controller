@@ -5,7 +5,7 @@ from gymnasium.spaces import Box
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 
 import src.reward.base as rwd
-from src.reward.base import NewReward
+from src.reward.base import NewReward, speed_to_gait_index, gait_loop_dict
 from src.control.base import UniTreeGo1ControlGenerator, UniTreeGo1ControlUDP
 from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
@@ -55,6 +55,8 @@ class UniTreeGo1Env(AntEnv):
         self.controller = UniTreeGo1Control(self, control_config=kwargs["control_config"])
         self.control_vector = self.controller.get()
         # for obs
+        self._feet_landed_time = np.zeros(len(feet))
+        self._feet_airborne_time = np.zeros(len(feet))
         self._init_customize_obs()
         # for demo
         self.render_mode = render_mode
@@ -110,25 +112,38 @@ class UniTreeGo1Env(AntEnv):
     # region | Obs
 
     def _init_customize_obs(self):
-        self._feet_landed_time = np.zeros(len(feet))
-        self._feet_airborne_time = np.zeros(len(feet))
-        obs_size = self.observation_space.shape[0] + 2 * len(feet) + len(self.controller)
+        obs_size = self.observation_space.shape[0]
+
+        def _add_obs_item(obs_name, obs_sample):
+            nonlocal self, obs_size
+            self.observation_structure[obs_name] = len(obs_sample)
+            obs_size += len(obs_sample)
+
+        _add_obs_item("foot_landed_time", self._feet_landed_time)
+        _add_obs_item("foot_airborne_time", self._feet_airborne_time)
+        _add_obs_item("control_vector", self.controller)
+        _add_obs_item("gait_type", self._get_gait_obs())
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
-        self.observation_structure["foot_landed_time"] = len(feet)
-        self.observation_structure["foot_airborne_time"] = len(feet)
-        self.observation_structure["control_vector"] = len(self.controller)
+        
 
     def _get_obs(self):
         obs = super()._get_obs()
         feet_obs = self._get_feet_obs()
         control_obs = self.control_vector
-        return np.concatenate((obs, feet_obs.flatten(), control_obs.flatten()))
+        gait_obs = self._get_gait_obs()
+        return np.concatenate((obs, feet_obs.flatten(), control_obs.flatten(), gait_obs.flatten()))
 
     def _get_feet_obs(self):
         for i, is_touching in enumerate(rwd.are_foot_touching_ground(self)):
             self._feet_airborne_time[i] = 0 if is_touching else self._feet_airborne_time[i] + 1
             self._feet_landed_time[i] = self._feet_landed_time[i] + 1 if is_touching else 0
         return np.concatenate((self._feet_landed_time.flatten(), self._feet_airborne_time.flatten()))
+    
+
+    def _get_gait_obs(self):
+        gait_index = speed_to_gait_index(np.linalg.norm(self.control_vector[0:2]))
+        return np.eye(len(gait_loop_dict))[gait_index].flatten()
+
 
 # region | Control
 

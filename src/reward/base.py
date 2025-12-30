@@ -8,7 +8,7 @@ from src.reward.constraint import z_velocity_l2_xy_vel_weighted, z_position_l2_x
 from src.reward.constraint import z_velocity_l2, z_position_l2
 from src.reward.action import action_change_l2
 from src.reward.hinge import hinge_angular_velocity_l2, hinge_position_l2, hinge_exceed_limit_l1, hinge_energy_l1
-from src.reward.gait import gait_loop_duration_tanh
+from src.reward.gait import gait_loop_duration_tanh, speed_to_gait_index, speed_to_gait_name, gait_loop_dict
 from src.reward.foot import foot_state_duration_exp, foot_sliding_velocity_l2, foot_lift_height_l2_exp_xy_vel_weighted
 
 
@@ -19,6 +19,9 @@ __all__ = [
     "get_hinge_soft_upper_limit",
     "are_foot_touching_ground",
     "get_foot_state",
+    "speed_to_gait_index",
+    "speed_to_gait_name",
+    "gait_loop_dict",
 
     "is_alive",
 
