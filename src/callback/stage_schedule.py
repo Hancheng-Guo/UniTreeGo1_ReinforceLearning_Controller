@@ -79,16 +79,10 @@ class SmoothStep():
     
 
 class StageScheduleCallback(BaseCallback):
-    def __init__(self, 
-                 base_stage = None,
-                 control_generator_schedule = None,
-                 verbose = 0,
-                 **kwargs):
+    def __init__(self, base_stage, verbose = 0, **kwargs):
         super().__init__(verbose)
-        self.base_stage = base_stage
-        self.stage = None
+        self.stage = base_stage
         self.winlen = None
-        self.control_generator_schedule = control_generator_schedule
 
         self.ep_lengths = None
         self.ep_lengths_fun = SmoothStep(
@@ -109,10 +103,6 @@ class StageScheduleCallback(BaseCallback):
         self.robot_x_velocity = deque([], maxlen=self.winlen)
         self.robot_y_velocity = deque([], maxlen=self.winlen)
         self.z_angular_velocity = deque([], maxlen=self.winlen)
-        if self.base_stage is not None:
-            self.stage = np.load(self.base_stage)
-        else:
-            self.stage = Stage.idle
         return True
     
     def _on_rollout_start(self):

@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
 from torch import nn
@@ -11,7 +12,7 @@ from src.callback.base import CustomCheckpointCallback
 from src.callback.base import AdaptiveLRCallback
 from src.callback.base import ProgressBarCallback
 from src.callback.base import CustomTensorboardCallback, ThreadTensorBoard
-from src.callback.base import StageScheduleCallback
+from src.callback.base import StageScheduleCallback, Stage
 from src.config.base import CONFIG, update_CONFIG, get_CONFIG
 
 
@@ -45,6 +46,29 @@ def get_algorithm_kwargs(base_name, base_dir, config, config_inheritance):
     return algorithm_kwargs
 
 
+def get_callback_kwargs(base_name, base_dir, config):
+    try:
+        base_stage_path = os.path.join(base_dir, f"cst_{base_name}.npy")
+        base_stage = np.load(base_stage_path)
+    except:
+        base_stage = Stage.idle
+    callback_kwargs = {
+        # for StageScheduleCallback
+        "base_stage": base_stage,
+        # for CustomTensorboardCallback
+        "log_freq": config["train"]["custom_log_freq"],
+        # for AdaptiveLRCallback
+        "init_lr": config["algorithm"]["learning_rate"],
+        # for CustomCheckpointCallback
+        "save_freq": config["train"]["checkpoint_freq"],
+        "env_py_path": config["path"]["env_py"],
+        "checkpoint_tree_file_path": config["path"]["checkpoint_tree"],
+        "checkpoints_path": config["path"]["output"],
+        "base_name": base_name
+    }
+    return callback_kwargs
+
+
 def make_train_env(config, *args, **kwargs):
     return make_gym_env(config, *args, **kwargs)
 
@@ -60,9 +84,10 @@ def ppo_train(base_name=None, config_inheritance=False, note_skip=False):
     
     algorithm_kwargs = get_algorithm_kwargs(base_name, base_dir, CONFIG, config_inheritance)
     train_env = make_vec_env(lambda: make_train_env(CONFIG), n_envs=CONFIG["train"]["n_envs"])
-    model, train_env, callback_kwargs = load_model(train_env, base_name, base_dir, CONFIG,
-                                                   tensorboard_log=save_dir,
-                                                   algorithm_kwargs=algorithm_kwargs)
+    model, train_env = load_model(train_env, base_name, base_dir, CONFIG,
+                                  tensorboard_log=save_dir,
+                                  algorithm_kwargs=algorithm_kwargs)
+    callback_kwargs = get_callback_kwargs(base_name, base_dir, CONFIG)
     model.learn(total_timesteps=CONFIG["train"]["total_timesteps"],
                 tb_log_name=f"log_{save_name}",
                 callback=[ProgressBarCallback(**callback_kwargs),

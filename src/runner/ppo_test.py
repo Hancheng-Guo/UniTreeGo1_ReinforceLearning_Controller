@@ -95,8 +95,8 @@ def ppo_test(test_name=None, n_tests=3, max_steps=1000):
 
     if test_name:
         test_env = make_vec_env(lambda: make_demo_env(CONFIG), n_envs=1)
-        model, test_env, callback_kwargs = load_model(test_env, test_name, test_dir, CONFIG)
-        test_env.envs[0].env.env.env.env.stage = np.load(callback_kwargs["base_stage"])
+        model, test_env = load_model(test_env, test_name, test_dir, CONFIG)
+        test_env.envs[0].env.env.env.env.stage = np.load( os.path.join(test_env, f"cst_{test_name}.npy"))
         test_env.training = False
         test_env.norm_reward = False
         obs = test_env.reset()

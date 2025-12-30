@@ -27,21 +27,4 @@ def load_model(env, base_name, base_dir, config, algorithm_kwargs={}, **kwargs):
     if config["is"]["model_action_space_visiable"]:
         display_action(env)
 
-    try:
-        base_stage = os.path.join(base_dir, f"cst_{base_name}.npy")
-    except:
-        base_stage = None
-    callback_kwargs = {
-        # for StageScheduleCallback
-        "base_stage": base_stage,
-        # for CustomTensorboardCallback
-        "log_freq": config["train"]["custom_log_freq"],
-        # for CustomCheckpointCallback
-        "save_freq": config["train"]["checkpoint_freq"],
-        "env_py_path": config["path"]["env_py"],
-        "checkpoint_tree_file_path": config["path"]["checkpoint_tree"],
-        "checkpoints_path": config["path"]["output"],
-        "base_name": base_name
-    }
-
-    return model, env, callback_kwargs
+    return model, env
