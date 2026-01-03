@@ -1,4 +1,4 @@
-def get_CONFIG(config, field=None, try_keys=[]):
+def get_config(config, field=None, try_keys=[]):
     if field is not None:
         try_cfg = config.get(field, {})
         optional_cfg = {}

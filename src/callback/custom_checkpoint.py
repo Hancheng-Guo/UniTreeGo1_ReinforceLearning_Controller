@@ -7,7 +7,7 @@ import numpy as np
 from anytree import Node, RenderTree, find
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.utils import FloatSchedule, ConstantSchedule
-from src.config.base import save_CONFIG
+from src.config.base import save_config
 
 
 def from_dict(json_dict, parent=None):
@@ -66,6 +66,7 @@ class CustomCheckpointCallback(BaseCallback):
                  save_name: str,
                  save_dir: str,
                  note: str = "",
+                 config: dict = {},
                  base_name: str = None,
                  save_freq: int = 200000,
                  env_py_path: str = None,
@@ -73,13 +74,13 @@ class CustomCheckpointCallback(BaseCallback):
                  checkpoints_path: str = ".",
                  save_vecnormalize: bool = True,
                  verbose: int = 2,
-                 **kwargs
-                 ):
+                 **kwargs):
         super().__init__(verbose)
         self.save_name = save_name
         self.save_dir = save_dir
         self.base_name = base_name
         self.note = note
+        self.config = config
         self.save_freq = save_freq
         self.env_py_path = env_py_path
         self.checkpoint_tree_file_path = checkpoint_tree_file_path
@@ -88,7 +89,7 @@ class CustomCheckpointCallback(BaseCallback):
         self.save_count = 1
         self.last_save_step = None
 
-    def _on_training_start(self)  -> bool:
+    def _on_training_start(self, **kwargs) -> bool:
         self.save_freq = (-self.save_freq % self.model.n_envs) + self.save_freq
         return True
 
@@ -128,7 +129,7 @@ class CustomCheckpointCallback(BaseCallback):
 
         # save config
         config_path = os.path.join(self.save_dir, f"cfg_{self._counted_save_name}.yaml")
-        save_CONFIG(config_path)
+        save_config(self.config, config_path)
         if self.verbose >= 2:
             print(f"Saving config to {config_path}")
 
@@ -152,11 +153,11 @@ class CustomCheckpointCallback(BaseCallback):
         self.save_count += 1
         return True
         
-    def _on_step(self) -> bool:
+    def _on_step(self, **kwargs) -> bool:
         if (self.n_calls * self.model.n_envs) % self.save_freq == 0:
             self._save_checkpoint()
         return True
 
-    def _on_training_end(self) -> bool:
+    def _on_training_end(self, **kwargs) -> bool:
         self._save_checkpoint()
         return True

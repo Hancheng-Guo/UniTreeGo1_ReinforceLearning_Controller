@@ -3,7 +3,10 @@ import shutil
 import xml.etree.ElementTree as ET
 
 
-def modify_model_camera(dir_original, dir_modified, camera_pos, camera_xyaxes):
+def modify_model_camera(dir_original: str,
+                        dir_modified: str,
+                        camera_pos: str,
+                        camera_xyaxes: str):
 
     os.makedirs(dir_modified, exist_ok=True)
     for root, dirs, files in os.walk(dir_original):

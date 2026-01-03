@@ -1,12 +1,14 @@
 from stable_baselines3.common.callbacks import BaseCallback
+from src.callback.common.test_base_callback import TestBaseCallback
 
 
 class ProgressBar():
-    def __init__(self, total,
-                 custom_str="",
-                 highlight_len=3,
-                 bar_len=40,
-                 call_times_total=None,
+    def __init__(self,
+                 total: int,
+                 custom_str: str = "",
+                 highlight_len: int = 3,
+                 bar_len :int = 40,
+                 call_times_total: int = None,
                  ):
         self.i = 0
         self.total = total
@@ -23,11 +25,11 @@ class ProgressBar():
             self.call_times_total = None
             self.call_times_len = 0
 
-    def reset(self) -> bool:
+    def reset(self):
         self.i = 0
         self.call_times += 1
 
-    def update(self, done) -> bool:
+    def update(self, done):
         self.i += 1
         end_str = "<OUT OF RANGE!>\r" if done > self.total else "\r"
         done = self.total if done > self.total else done
@@ -55,18 +57,19 @@ class ProgressBar():
                end=end_str)
         return True
 
-    def clear(self) -> bool:
+    def clear(self):
         print("\033[2K\r", end="")
-        return True
     
 
-class ProgressBarCallback(BaseCallback):
-    def __init__(self, verbose=0, **kwargs):
+class TrainProgressCallback(BaseCallback):
+    def __init__(self,
+                 verbose: int = 0,
+                 **kwargs):
         super().__init__(verbose)
         self.bar = None
         self.current_step = None
 
-    def _on_training_start(self) -> bool:
+    def _on_training_start(self, **kwargs) -> bool:
         rollout_steps = self.model.n_steps * self.model.n_envs
         rollout_times_total = (self.model._total_timesteps + rollout_steps - 1) // rollout_steps
         self.bar = ProgressBar(total=self.model.n_steps * self.model.n_envs,
@@ -74,16 +77,40 @@ class ProgressBarCallback(BaseCallback):
                                call_times_total=rollout_times_total)
         return True
 
-    def _on_rollout_start(self) -> bool:
+    def _on_rollout_start(self, **kwargs) -> bool:
         self.bar.reset()
         self.current_step = 0
         return True
 
-    def _on_step(self) -> bool:
+    def _on_step(self, **kwargs) -> bool:
         self.current_step += 1
         self.bar.update(self.current_step * self.model.n_envs)
         return True
     
-    def _on_rollout_end(self) -> bool:
+    def _on_rollout_end(self, **kwargs) -> bool:
+        self.bar.clear()
+        return True
+
+
+class TestProgressCallback(TestBaseCallback):
+    def __init__(self,
+                 n_tests: int,
+                 max_steps: int):
+        self.bar = ProgressBar(total=max_steps,
+                               custom_str="Darwing",
+                               call_times_total=n_tests)
+        self.i = None
+        
+    def _on_test_start(self, **kwargs) -> bool:
+        self.bar.reset()
+        self.i = 0
+        return True
+    
+    def _on_test_step(self, **kwargs) -> bool:
+        self.i += 1
+        self.bar.update(self.i)
+        return True
+    
+    def _on_test_end(self, **kwargs) -> bool:
         self.bar.clear()
         return True

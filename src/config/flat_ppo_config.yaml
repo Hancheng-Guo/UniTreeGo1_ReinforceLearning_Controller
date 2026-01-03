@@ -3,8 +3,8 @@ train:
   frame_skip: 5
   reset_noise_scale: 0.1
   max_episode_steps: 1000
-  total_timesteps: 40960000
-  checkpoint_freq: 1024000
+  total_timesteps: 4096
+  checkpoint_freq: 1024
   custom_log_freq: 2048
 
 demo:
@@ -90,12 +90,12 @@ path:
   output: ".\\output\\"
   model_dir_original: ".\\assets\\mujoco_menagerie\\unitree_go1\\"
   model_dir_modified: ".\\assets\\model\\"
-  env_py: ".\\src\\env\\unitree_go1.py"
+  env_py: ".\\src\\env\\flat_locomotion_env.py"
   checkpoint_tree: ".\\output\\checkpoint_tree"
 
 is:
   param_shared: True
-  model_camera_modified: True
+  model_camera_modified: False
   model_body_part_visiable: False
   model_obs_space_visiable: False
   model_action_space_visiable: False

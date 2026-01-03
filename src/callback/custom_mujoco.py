@@ -1,25 +1,28 @@
 import mujoco
+from src.callback.common.env_base_callback import EnvBaseCallback
 
-
-class CustomMujocoCallback():
-    def __init__(self, render_mode):
+class CustomMujocoCallback(EnvBaseCallback):
+    def __init__(self, render_mode: str):
         self.render_mode = render_mode
 
         
-    def _on_training_start(self, env, *args, **kwargs):
+    def _on_training_start(self, env, **kwargs) -> bool:
         self.env = env
         self.camera_id = mujoco.mj_name2id(self.env.model, mujoco.mjtObj.mjOBJ_CAMERA, "tracking")
         self.env.mjc_img = None
+        return True
 
-    def _on_episode_start(self, *args, **kwargs):
+    def _on_episode_start(self, **kwargs) -> bool:
         if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
             self.reset()
+        return True
 
 
-    def _on_step(self, *args, **kwargs):
+    def _on_step(self, **kwargs) -> bool:
         if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
             self.env.mjc_img = self.env.render(self.render_mode)
-
+        return True
+    
     
     def reset(self):
         self._reset_tracking_camera()

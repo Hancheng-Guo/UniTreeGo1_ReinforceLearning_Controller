@@ -2,20 +2,15 @@ import imageio
 import os
 import io
 import re
-import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-from stable_baselines3.common.env_util import make_vec_env
 
-from src.runner.common.make_gym_env import make_gym_env
-from src.runner.common.check_base_name import check_base_name
-from src.runner.common.load_model import load_model
-from src.callback.base import ProgressBar
-from src.config.base import CONFIG
+from src.callback.common.test_base_callback import TestBaseCallback
 
 
-class TestSaver():
-    def __init__(self, test_env, test_name, test_dir):
+
+class RenderSaver():
+    def __init__(self, test_env, test_name: str, test_dir: str):
         self.test_env = test_env
         self.test_name = test_name
         self.test_dir = test_dir
@@ -33,7 +28,7 @@ class TestSaver():
         self.plt_frames = []
         self.mjc_frames = []
 
-    def _get_next_filename(self, prefix, ext): # e.g. prefix="img", ext="gif"
+    def _get_next_filename(self, prefix: str, ext: str): # e.g. prefix="img", ext="gif"
         pattern = re.compile(rf"{prefix}_{self.test_name}\[(\d+)\].{ext}$")
         max_num = 0
         for filename in os.listdir(self.save_dir): 
@@ -80,44 +75,21 @@ class TestSaver():
         self.target_index += 1
 
 
-def make_demo_env(config, *args, **kwargs):
-    return make_gym_env(config,
-                        render_mode=config["demo"]["demo_type"],
-                        width=config["demo"]["mjc_render_width"],
-                        height=config["demo"]["mjc_render_height"],
-                        *args, **kwargs)
+class RenderSaverCallback(TestBaseCallback):
+    def __init__(self, ppo_tester, **kwargs):
+        self.render_saver = RenderSaver(ppo_tester.test_env,
+                                        ppo_tester.base_name,
+                                        ppo_tester.base_dir)
 
+    def _on_test_start(self, **kwargs) -> bool:
+        self.render_saver.reset()
+        return True
+    
+    def _on_test_step(self, **kwargs) -> bool:
+        self.render_saver.append()
+        return True
 
-def ppo_test(test_name=None, n_tests=3, max_steps=1000):
-
-    test_name, test_dir = check_base_name(test_name, config=CONFIG)
-    bar = ProgressBar(total=max_steps, custom_str="Darwing", call_times_total=n_tests)
-
-    if test_name:
-        test_env = make_vec_env(lambda: make_demo_env(CONFIG), n_envs=1)
-        model, test_env = load_model(test_env, test_name, test_dir, CONFIG)
-        test_env.envs[0].env.env.env.env.stage = np.load( os.path.join(test_env, f"cst_{test_name}.npy"))
-        test_env.training = False
-        test_env.norm_reward = False
-        obs = test_env.reset()
-
-        test_saver = TestSaver(test_env, test_name, test_dir)
-        for i in range(n_tests):
-            bar.reset()
-            for j in range(max_steps):
-                bar.update(j + 1)
-                action, _ = model.predict(obs, deterministic=True)
-                obs, reward, done, info = test_env.step(action)
-                if done:
-                    break
-                test_saver.append()
-            bar.clear()
-            print(" > Render Saving...", end="\r")
-            test_saver.save()
-            test_saver.reset()
-            obs = test_env.reset()
- 
-        test_env.close()
-        plt.close('all')
-        print("\nModel %s test accomplished!\n" % test_name)
-    return test_name
+    def _on_test_end(self, **kwargs) -> bool:
+        print(" > Render Saving...", end="\r")
+        self.render_saver.save()
+        return True

@@ -14,7 +14,7 @@ feet = ["FR", "FL", "RR", "RL"]
 hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 
 
-class UniTreeGo1Env(AntEnv):
+class FlatLocomotionEnv(AntEnv):
     def __init__(
             self,
             xml_file: str = "ant.xml",
@@ -65,7 +65,7 @@ class UniTreeGo1Env(AntEnv):
                                                    plt_n_lines=plt_n_lines,
                                                    plt_x_range=plt_x_range),
                           CustomMujocoCallback(render_mode),]
-        self._dispatch("_on_training_start", self)
+        self._dispatch("_on_training_start", env=self)
         
 
     def reset(self, *, seed=None, options=None):
@@ -122,7 +122,7 @@ class UniTreeGo1Env(AntEnv):
         _add_obs_item("foot_landed_time", self._feet_landed_time)
         _add_obs_item("foot_airborne_time", self._feet_airborne_time)
         _add_obs_item("control_vector", self.controller)
-        _add_obs_item("gait_type", self._get_gait_obs())
+        # _add_obs_item("gait_type", self._get_gait_obs())
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
         
 
@@ -130,8 +130,9 @@ class UniTreeGo1Env(AntEnv):
         obs = super()._get_obs()
         feet_obs = self._get_feet_obs()
         control_obs = self.control_vector
-        gait_obs = self._get_gait_obs()
-        return np.concatenate((obs, feet_obs.flatten(), control_obs.flatten(), gait_obs.flatten()))
+        # gait_obs = self._get_gait_obs()
+        # return np.concatenate((obs, feet_obs.flatten(), control_obs.flatten(), gait_obs.flatten()))
+        return np.concatenate((obs, feet_obs.flatten(), control_obs.flatten()))
 
     def _get_feet_obs(self):
         for i, is_touching in enumerate(rwd.are_foot_touching_ground(self)):
@@ -140,9 +141,9 @@ class UniTreeGo1Env(AntEnv):
         return np.concatenate((self._feet_landed_time.flatten(), self._feet_airborne_time.flatten()))
     
 
-    def _get_gait_obs(self):
-        gait_index = speed_to_gait_index(np.linalg.norm(self.control_vector[0:2]))
-        return np.eye(len(gait_loop_dict))[gait_index].flatten()
+    # def _get_gait_obs(self):
+    #     gait_index = speed_to_gait_index(np.linalg.norm(self.control_vector[0:2]))
+    #     return np.eye(len(gait_loop_dict))[gait_index].flatten()
 
 
 # region | Control

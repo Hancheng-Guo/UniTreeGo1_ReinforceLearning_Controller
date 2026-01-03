@@ -68,7 +68,7 @@ class ThreadTensorBoard():
 class CustomTensorboardCallback(BaseCallback):
     def __init__(self,
                  log_freq: int = 2048,
-                 verbose=0,
+                 verbose: int = 0,
                  **kwargs):
         super().__init__(verbose)
         self.writer = None
@@ -76,20 +76,20 @@ class CustomTensorboardCallback(BaseCallback):
         self.rollout_index = None
         self.data = None
 
-    def _on_training_start(self) -> bool:
+    def _on_training_start(self, **kwargs) -> bool:
         self.writer = [SummaryWriter(os.path.join(self.logger.dir,  f"env_{env_id}"))
                        for env_id in range(self.model.n_envs)]
         self.log_freq = min((-self.log_freq % self.model.n_envs) + self.log_freq,
                             self.model.n_envs * self.model.n_steps)
         return True
     
-    def _on_rollout_start(self) -> bool:
+    def _on_rollout_start(self, **kwargs) -> bool:
         self.rollout_index = self.num_timesteps
         self._data_reset()
         # self._data_split()
         return True
 
-    def _on_step(self) -> bool:
+    def _on_step(self, **kwargs) -> bool:
         infos = self.locals["infos"]
         for env_id in range(self.model.n_envs):
             for key, _ in target_items.items():
@@ -101,7 +101,7 @@ class CustomTensorboardCallback(BaseCallback):
             self._data_reset()
         return True
 
-    def _on_training_end(self):
+    def _on_training_end(self, **kwargs) -> bool:
         self._data_split(step_shift=1)
         for env_id in range(self.model.n_envs):
             self.writer[env_id].close()

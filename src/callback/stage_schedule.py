@@ -17,7 +17,7 @@ class Stage(IntEnum):
     done = 8
 
 
-def smoothstep_Cinf(x, a=0, b=1, scale=1, alpha=1):
+def smoothstep_Cinf(x, a=0.0, b=1.0, scale=1.0, alpha=1.0):
     assert b > a
     assert alpha > 0
 
@@ -35,13 +35,15 @@ def smoothstep_Cinf(x, a=0, b=1, scale=1, alpha=1):
     return y * scale
 
 
-def _const(x, c=0, *args, **kwargs):
+def _const(x, c=0.0, *args, **kwargs):
     x = np.asarray(x, dtype=float)
     return np.ones_like(x) * c
 
 
 class SmoothStep():
-    def __init__(self, points={}, alpha=1):
+    def __init__(self,
+                 points: dict,
+                 alpha: float = 1):
         self._alpha = alpha
         self._points = points
         self._increment =self._get_increment(self._points)
@@ -79,7 +81,10 @@ class SmoothStep():
     
 
 class StageScheduleCallback(BaseCallback):
-    def __init__(self, base_stage, verbose = 0, **kwargs):
+    def __init__(self,
+                 base_stage: float,
+                 verbose: int = 0,
+                 **kwargs):
         super().__init__(verbose)
         self.stage = base_stage
         self.winlen = None
@@ -97,7 +102,7 @@ class StageScheduleCallback(BaseCallback):
         self.robot_y_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
         self.z_angular_velocity_fun = SmoothStep({0.0: 0, 0.75: 1})
 
-    def _on_training_start(self):
+    def _on_training_start(self, **kwargs) -> bool:
         self.winlen = self.model.n_steps * self.model.n_envs
         self.ep_lengths = deque([], maxlen=100)
         self.robot_x_velocity = deque([], maxlen=self.winlen)
@@ -105,12 +110,12 @@ class StageScheduleCallback(BaseCallback):
         self.z_angular_velocity = deque([], maxlen=self.winlen)
         return True
     
-    def _on_rollout_start(self):
+    def _on_rollout_start(self, **kwargs) -> bool:
         for env in self.model.env.venv.envs:
             env.env.env.env.env.stage = self.stage
         return True
     
-    def _on_step(self):
+    def _on_step(self, **kwargs) -> bool:
         for info in self.locals.get("infos", []):
             if "episode" in info:
                 self.ep_lengths.append(info["episode"]["l"])
@@ -121,7 +126,7 @@ class StageScheduleCallback(BaseCallback):
             self.z_angular_velocity.append(reward_info["z_angular_velocity_l2_exp"])
         return True
     
-    def _on_rollout_end(self):
+    def _on_rollout_end(self, **kwargs) -> bool:
         stage_robot_x_velocity = (int(self.stage) +
             self.robot_x_velocity_fun(np.mean(self.robot_x_velocity)))
         
