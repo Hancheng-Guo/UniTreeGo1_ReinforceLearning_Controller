@@ -5,19 +5,18 @@ from gymnasium.spaces import Box
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
 
 import src.reward.base as rwd
-from src.reward.base import NewReward, speed_to_gait_index, gait_loop_dict
+from src.reward.base import NewReward
 from src.control.base import UniTreeGo1ControlGenerator, UniTreeGo1ControlUDP
 from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
 
 feet = ["FR", "FL", "RR", "RL"]
-hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 
 
 class FlatLocomotionEnv(AntEnv):
     def __init__(
             self,
-            xml_file: str = "ant.xml",
+            xml_file: str,
             frame_skip: int = 5,
             main_body: int | str = 1,
             reset_noise_scale: float = 0.1,
@@ -30,6 +29,9 @@ class FlatLocomotionEnv(AntEnv):
             plt_x_range: int = 200,
             width: int = 480,
             height: int = 480,
+
+            reward_config: dict = {},
+            control_config: dict = {},
 
             **kwargs):
 
@@ -50,9 +52,9 @@ class FlatLocomotionEnv(AntEnv):
         self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
                           for foot in feet]
         self._floor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
-        self.reward = UniTreeGo1Reward(self, reward_config=kwargs["reward_config"])
+        self.reward = UniTreeGo1Reward(self, reward_config=reward_config)
         # for control
-        self.controller = UniTreeGo1Control(self, control_config=kwargs["control_config"])
+        self.controller = UniTreeGo1Control(self, control_config=control_config)
         self.control_vector = self.controller.get()
         # for obs
         self._feet_landed_time = np.zeros(len(feet))

@@ -21,4 +21,6 @@ class OUProcess:
     
     def reset(self):
         self.x = 0.
-        self.memory.clear()
+        for _ in range(self.order-1):
+            self.memory.append(0.)
+        return 0.

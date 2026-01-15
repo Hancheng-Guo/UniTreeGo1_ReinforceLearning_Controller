@@ -6,31 +6,6 @@ from stable_baselines3.common.callbacks import BaseCallback
 from torch.utils.tensorboard import SummaryWriter
 
 
-target_items = {
-    "stage": 0,
-    "alive_reward": 0,
-    "illegal_contact_penalty": 0,
-    "robot_xy_velocity_reward": 0,
-    "robot_x_velocity_l2_exp": 0,
-    "robot_y_velocity_l2_exp": 0,
-    "z_angular_velocity_l2_exp": 0,
-    "z_angular_velocity_reward": 0,
-    "z_velocity_penalty": 0,
-    "z_position_penalty": 0,
-    "xy_angular_velocity_penalty": 0,
-    "xy_angular_penalty": 0,
-    "action_change_penalty": 0,
-    "hinge_angular_velocity_penalty": 0,
-    "hinge_position_penalty": 0,
-    "hinge_exceed_limit_penalty": 0,
-    "hinge_energy_penalty": 0,
-    "gait_loop_reward": 0,
-    "foot_state_duration_reward": 0,
-    "foot_sliding_velocity_penalty": 0,
-    "foot_lift_height_reward": 0,
-}
-
-
 class ThreadTensorBoard(): 
     def __init__(self,
                  log_path: str = ".",):
@@ -68,11 +43,13 @@ class ThreadTensorBoard():
 class CustomTensorboardCallback(BaseCallback):
     def __init__(self,
                  log_freq: int = 2048,
+                 tensorboard_items: dict = {},
                  verbose: int = 0,
                  **kwargs):
         super().__init__(verbose)
         self.writer = None
         self.log_freq = log_freq
+        self.tensorboard_items = tensorboard_items if tensorboard_items is not None else {}
         self.rollout_index = None
         self.data = None
 
@@ -92,7 +69,7 @@ class CustomTensorboardCallback(BaseCallback):
     def _on_step(self, **kwargs) -> bool:
         infos = self.locals["infos"]
         for env_id in range(self.model.n_envs):
-            for key, _ in target_items.items():
+            for key, _ in self.tensorboard_items.items():
                 self.data[env_id][key] += infos[env_id][key]
 
         timesteps_past = self.num_timesteps - self.rollout_index
@@ -115,12 +92,12 @@ class CustomTensorboardCallback(BaseCallback):
         return f"custom/{key}_{suffix}"
     
     def _data_reset(self):
-        self.data = [{key: value for key, value in target_items.items()}
+        self.data = [{key: value for key, value in self.tensorboard_items.items()}
                      for _ in range(self.model.n_envs)]
 
     def _data_dump(self):
         for env_id in range(self.model.n_envs):
-            for key, _ in target_items.items():
+            for key, _ in self.tensorboard_items.items():
                 self.writer[env_id].add_scalar(
                     self._tb_log_name(key, "mean"),
                     self.data[env_id][key] / self.log_freq * self.model.n_envs,
@@ -129,7 +106,7 @@ class CustomTensorboardCallback(BaseCallback):
                 
     def _data_split(self, step_shift=0):
         for env_id in range(self.model.n_envs):
-            for key, _ in target_items.items():
+            for key, _ in self.tensorboard_items.items():
                 self.writer[env_id].add_scalar(
                     self._tb_log_name(key, "mean"),
                     float("inf"),

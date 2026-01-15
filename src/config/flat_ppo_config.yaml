@@ -3,8 +3,8 @@ train:
   frame_skip: 5
   reset_noise_scale: 0.1
   max_episode_steps: 1000
-  total_timesteps: 4096
-  checkpoint_freq: 1024
+  total_timesteps: 40960000
+  checkpoint_freq: 10240
   custom_log_freq: 2048
 
 demo:
@@ -96,6 +96,29 @@ path:
 is:
   param_shared: True
   model_camera_modified: False
-  model_body_part_visiable: False
-  model_obs_space_visiable: False
-  model_action_space_visiable: False
+  model_body_part_visiable: True
+  model_obs_space_visiable: True
+  model_action_space_visiable: True
+
+tensorboard_items:
+  stage: 0
+  alive_reward: 0
+  illegal_contact_penalty: 0
+  robot_xy_velocity_reward: 0
+  robot_x_velocity_l2_exp: 0
+  robot_y_velocity_l2_exp: 0
+  z_angular_velocity_l2_exp: 0
+  z_angular_velocity_reward: 0
+  z_velocity_penalty: 0
+  z_position_penalty: 0
+  xy_angular_velocity_penalty: 0
+  xy_angular_penalty: 0
+  action_change_penalty: 0
+  hinge_angular_velocity_penalty: 0
+  hinge_position_penalty: 0
+  hinge_exceed_limit_penalty: 0
+  hinge_energy_penalty: 0
+  gait_loop_reward: 0
+  foot_state_duration_reward: 0
+  foot_sliding_velocity_penalty: 0
+  foot_lift_height_reward: 0

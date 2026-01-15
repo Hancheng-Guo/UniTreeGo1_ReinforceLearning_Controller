@@ -113,6 +113,7 @@ class PPORunner:
     def load_model(self,
                    env: gym.Env,
                    algorithm_kwargs: dict = {},
+                   prefix: str = "",
                    **kwargs):
         """Load an existing model or create a new one based on configuration.
         
@@ -130,8 +131,9 @@ class PPORunner:
                newly created PPO model and env is the normalized environment
         """
         if self.base_name:
-            base_model = os.path.join(self.base_dir, f"mdl_{self.base_name}.zip")
-            base_env = os.path.join(self.base_dir, f"env_{self.base_name}.pkl")
+            prefix = f"{prefix}_" if prefix else ""
+            base_model = os.path.join(self.base_dir, f"{prefix}mdl_{self.base_name}.zip")
+            base_env = os.path.join(self.base_dir, f"{prefix}env_{self.base_name}.pkl")
             env = VecNormalize.load(base_env, env)
             algorithm_kwargs.pop("policy", None)
             algorithm_kwargs.pop("policy_kwargs", None)
@@ -145,8 +147,9 @@ class PPORunner:
     def register_callbacks(self, callbacks: list = []):
         self.callbacks = callbacks
 
-    def _dispatch(self, event_name, *args, **kwargs):
-        for cb in self.callbacks:
+    def _dispatch(self, event_name, callbacks: list = None, *args, **kwargs):
+        callbacks = callbacks if callbacks is not None else self.callbacks
+        for cb in callbacks:
             fn = getattr(cb, event_name, None)
             if fn is not None:
                 fn(*args, **kwargs)
@@ -187,31 +190,37 @@ class PPOTrainer(PPORunner):
         if self.save_dir is not None:
             os.makedirs(self.save_dir, exist_ok=True)
 
-    def maybe_run_tensorboard(self, tensorboard_skip: bool=False):
+    def run_tensorboard(self, tensorboard_skip: bool=False):
         if not tensorboard_skip:
             self.tensorboard_thread = ThreadTensorBoard(self.save_dir)
             self.tensorboard_thread.run()
         else:
             self.tensorboard_thread = None
 
-    def get_algorithm_kwargs(self, config_inheritance: bool=False):
-        """Extract and prepare algorithm hyperparameters from configuration for RL algorithm initialization.
-        
-        This function handles loading base configuration if available and extracts 
-        algorithm-related parameters like steps, batch size, learning rate, etc.
-        It also processes the activation function in the policy network by 
-        converting string representations to actual neural network activation functions.
+    def inherite_config(self, config_inheritance: bool=False):
+        """Inherite configuration from base configuration.
 
         Args:
             config_inheritance (bool): Flag indicating whether to inherit base configuration
         
         :Updates:
-        - :self.algorithm_kwargs: get algorithm hyperparameters including n_steps, batch_size, learning_rate, etc.
+        - :self.config: if config_inheritance is True, inherite base configuration, otherwise keep original configuration
         """
         # If base configuration name is provided and configuration inheritance is needed, load the base configuration file
         if self.base_name and config_inheritance:
             base_config = os.path.join(self.config["path"]["output"], self.base_dir, f"cfg_{self.base_name}.yaml")
             update_config(self.config, base_config)
+
+    def get_algorithm_kwargs(self):
+        """Extract and prepare algorithm hyperparameters from configuration for RL algorithm initialization.
+        
+        This function extracts algorithm-related parameters like steps, batch size, etc.
+        It also processes the activation function in the policy network by 
+        converting string representations to actual neural network activation functions.
+
+        :Updates:
+        - :self.algorithm_kwargs: get algorithm hyperparameters including n_steps, batch_size, learning_rate, etc.
+        """
         # Extract algorithm-related parameters from the configuration
         self.algorithm_kwargs = get_config(config=self.config, field="algorithm",
                                            try_keys=["n_steps", "batch_size", "n_epochs", "clip_range", "gamma",
@@ -243,6 +252,7 @@ class PPOTrainer(PPORunner):
             "base_stage": base_stage,
             # for CustomTensorboardCallback
             "log_freq": self.config["train"]["custom_log_freq"],
+            "tensorboard_items": self.config["tensorboard_items"],
             # for AdaptiveLRCallback
             "init_lr": self.config["algorithm"]["learning_rate"],
             # for CustomCheckpointCallback
@@ -314,13 +324,14 @@ class PPOTrainer(PPORunner):
         self.display_train_env()
         
 
-    def display_train_env(self):
+    def display_train_env(self, gym_env: gym.Env = None):
         """Display information about the training environment.
         
         This method displays information about the training environment, including 
         the body parts, observation space, and action space.
         """
-        gym_env = self.train_env.venv.envs[0].env
+        if gym_env is None:
+            gym_env = self.train_env.venv.envs[0].env
         model = gym_env.unwrapped.model
 
         if self.config["is"]["model_body_part_visiable"]:

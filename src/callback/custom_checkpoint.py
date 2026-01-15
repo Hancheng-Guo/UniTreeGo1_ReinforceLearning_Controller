@@ -43,9 +43,8 @@ def to_txt(root, txt_path="", checkpoints_path=""):
         print("\n\n\nNote: Models marked with * have been deleted.", file=f)
 
 
-def update_checkpoints_tree(child, parent="root", note="",
-                            file_path="", checkpoints_path="."):
-    json_path = f"{file_path}.json"
+def update_checkpoints_tree(child, parent="root", note="", checkpoints_path="."):
+    json_path = os.path.join(checkpoints_path, "checkpoint_tree.json")
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     root = from_dict(data)
@@ -58,10 +57,50 @@ def update_checkpoints_tree(child, parent="root", note="",
 
     json_dict = to_dict(root)
     json.dump(json_dict, open(json_path, "w"), ensure_ascii=False, indent=2)
-    to_txt(root, txt_path=f"{file_path}.txt", checkpoints_path=checkpoints_path)
+
+    txt_path = os.path.join(checkpoints_path, "checkpoint_tree.txt")
+    to_txt(root, txt_path=txt_path, checkpoints_path=checkpoints_path)
 
 
-class CustomCheckpointCallback(BaseCallback):
+class CustomCheckpoint():
+    def __init__(self, verbose: int = 2, **kwargs):
+        self.verbose = verbose
+
+    def _save_model(self, model, path):
+        model.save(path)
+        if self.verbose >= 2:
+            print(f"Saving model to {path}")
+
+    def _save_vec_norm_env(self, env, path):
+        if env is not None:
+            env.save(path)
+            if self.verbose >= 2:
+                print(f"Saving vecnormalized env to {path}")
+
+    def _save_checkpoint_tree(self, child_name, parent_name, note, checkpoints_path):
+        update_checkpoints_tree(child=child_name,
+                                parent=parent_name,
+                                note=note,
+                                checkpoints_path=checkpoints_path)
+        return child_name
+
+    def _save_config(self, config, path):
+        save_config(config, path)
+        if self.verbose >= 2:
+            print(f"Saving config to {path}")
+
+    def _save_pyfile(self, origin_path, target_path):
+        shutil.copy2(origin_path, target_path)
+        if self.verbose >= 2:
+            print(f"Saving origin py.file of customize env to {target_path}")
+
+    def _save_stage(self, stage, path):
+        np.save(path, stage)
+        if self.verbose >= 2:
+            print(f"Saving training stage to {path}")
+
+
+class CustomCheckpointCallback(BaseCallback, CustomCheckpoint):
     def __init__(self,
                  save_name: str,
                  save_dir: str,
@@ -87,77 +126,58 @@ class CustomCheckpointCallback(BaseCallback):
         self.checkpoints_path = checkpoints_path
         self.save_vecnormalize = save_vecnormalize
         self.save_count = 1
-        self.last_save_step = None
+        self.last_save_stamp = None
 
     def _on_training_start(self, **kwargs) -> bool:
         self.save_freq = (-self.save_freq % self.model.n_envs) + self.save_freq
         return True
+        
+    def _on_step(self, **kwargs) -> bool:
+        if (self.n_calls * self.model.n_envs) % self.save_freq == 0:
+            self._save_checkpoint(self.n_calls * self.model.n_envs)
+        return True
 
+    def _on_training_end(self, **kwargs) -> bool:
+        self._save_checkpoint(self.n_calls * self.model.n_envs)
+        return True
+    
     @property
     def _counted_save_name(self) -> str:
         return f"{self.save_name}_{self.save_count}"
 
-    def _save_checkpoint(self) -> bool:
-        if self.last_save_step == self.n_calls * self.model.n_envs:
+    def _save_checkpoint(self, current_stamp) -> bool:
+        if self.last_save_stamp == current_stamp:
             return True
-        lr_schedule_tmp = self.model.lr_schedule
-        lr_tmp = self.model.lr_schedule(self.model._current_progress_remaining)
-        self.model.learning_rate = lr_tmp
-        self.model.lr_schedule = FloatSchedule(ConstantSchedule(lr_tmp))
-        print()
+        self._on_saving_start()
 
-        # save model
-        model_path = os.path.join(self.save_dir, f"mdl_{self._counted_save_name}.zip")
-        self.model.save(model_path)
-        if self.verbose >= 2:
-            print(f"Saving model to {model_path}")
+        self._save_model(self.model,
+            os.path.join(self.save_dir, f"mdl_{self._counted_save_name}.zip"))
+        self._save_vec_norm_env(self.model.get_vec_normalize_env(),
+            os.path.join(self.save_dir, f"env_{self._counted_save_name}.pkl"))
+        self.base_name = self._save_checkpoint_tree(child_name=self._counted_save_name,
+                                                    parent_name=self.base_name,
+                                                    note=self.note,
+                                                    checkpoints_path=self.checkpoints_path)
+        self._save_config(self.config,
+            os.path.join(self.save_dir, f"cfg_{self._counted_save_name}.yaml"))
+        self._save_pyfile(self.env_py_path,
+            os.path.join(self.save_dir, f"bkp_{self._counted_save_name}.py"))
+        self._save_stage(self.model.env.venv.envs[0].env.env.env.env.stage,
+            os.path.join(self.save_dir, f"cst_{self._counted_save_name}.npy"))
 
-        # save vecnormalized env
-        env_path = os.path.join(self.save_dir, f"env_{self._counted_save_name}.pkl")
-        if self.save_vecnormalize and self.model.get_vec_normalize_env() is not None:
-            self.model.get_vec_normalize_env().save(env_path)
-            if self.verbose >= 2:
-                print(f"Saving vecnormalized env to {env_path}")
+        self._on_saving_end()
+        self.last_save_stamp = current_stamp
+        return True
+    
 
-        # update checkpoints tree
-        update_checkpoints_tree(child=self._counted_save_name,
-                                parent=self.base_name,
-                                note=self.note,
-                                file_path=self.checkpoint_tree_file_path,
-                                checkpoints_path=self.checkpoints_path)
-        self.base_name = self._counted_save_name
+    def _on_saving_start(self) -> None:
+        self.lr_schedule_tmp = self.model.lr_schedule
+        self.lr_tmp = self.model.lr_schedule(self.model._current_progress_remaining)
+        self.model.learning_rate = self.lr_tmp
+        self.model.lr_schedule = FloatSchedule(ConstantSchedule(self.lr_tmp))
 
-        # save config
-        config_path = os.path.join(self.save_dir, f"cfg_{self._counted_save_name}.yaml")
-        save_config(self.config, config_path)
-        if self.verbose >= 2:
-            print(f"Saving config to {config_path}")
 
-        # save origin py.file of customize env
-        backup_path = os.path.join(self.save_dir, f"bkp_{self._counted_save_name}.py")
-        shutil.copy2(self.env_py_path, backup_path)
-        if self.verbose >= 2:
-            print(f"Saving origin py.file of customize env to {backup_path}")
-
-        # save training stage
-        stage = self.model.env.venv.envs[0].env.env.env.env.stage
-        stage_path = os.path.join(self.save_dir, f"cst_{self._counted_save_name}.npy")
-        np.save(stage_path, stage)
-        if self.verbose >= 2:
-            print(f"Saving training stage to {stage_path}")
-
-        print()
-        self.last_save_step = self.n_calls * self.model.n_envs
-        self.model.lr_schedule = lr_schedule_tmp
+    def _on_saving_end(self) -> None:
+        self.model.lr_schedule = self.lr_schedule_tmp
         self.note = ""
         self.save_count += 1
-        return True
-        
-    def _on_step(self, **kwargs) -> bool:
-        if (self.n_calls * self.model.n_envs) % self.save_freq == 0:
-            self._save_checkpoint()
-        return True
-
-    def _on_training_end(self, **kwargs) -> bool:
-        self._save_checkpoint()
-        return True

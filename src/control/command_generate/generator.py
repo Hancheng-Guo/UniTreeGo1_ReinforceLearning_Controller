@@ -31,5 +31,7 @@ class UniTreeGo1ControlGenerator:
         return np.array(control_vector)
     
     def reset(self):
+        control_vector = []
         for controller in self.controllers:
-            controller.reset()
+            control_vector.append(controller.reset())
+        return np.array(control_vector)

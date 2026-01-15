@@ -14,7 +14,6 @@ class AdaptiveLRCallback(BaseCallback):
                  **kwargs):
         super().__init__(verbose)
         self.init_lr = init_lr
-        self.stage_old = None
         self.kl_min = kl_min
         self.kl_max = kl_max
         self.lr_min = lr_min
@@ -46,12 +45,6 @@ class AdaptiveLRCallback(BaseCallback):
     
 
     def _on_rollout_start(self, **kwargs) -> bool:
-        stage_current = int(self.model.env.venv.envs[0].env.env.env.env.stage)
-        if (self.stage_old is not None) and (self.stage_old != stage_current):
-            self.target_lr  = self.init_lr
-            self.current_lr = self.init_lr
-            self.smooth_step_left = 0
-        self.stage_old = stage_current
         return True
     
 

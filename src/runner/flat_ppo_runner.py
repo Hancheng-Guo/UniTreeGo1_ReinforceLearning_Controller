@@ -25,9 +25,10 @@ class FlatPPORunner(PPOTrainer, PPOTester):
         
         self.get_note(note_skip)    # Get training note information
         self.get_save_name()        # Get save name and directory
-        self.maybe_run_tensorboard(tensorboard_skip)    # Start TensorBoard thread for logging
-        self.get_algorithm_kwargs(config_inheritance)   # Prepare algorithm parameters
-        self.make_train_env("FlatLocomotionEnv")        # Create parallel training environment
+        self.run_tensorboard(tensorboard_skip)      # Start TensorBoard thread for logging
+        self.inherite_config(config_inheritance)    # Inherit config
+        self.get_algorithm_kwargs()                 # Prepare algorithm parameters
+        self.make_train_env("FlatLocomotionEnv")    # Create parallel training environment
         self.load_model_with_train_env(tensorboard_skip)    # Load model and environment
 
         self.get_callback_kwargs()  # Get callback function parameters
