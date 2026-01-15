@@ -1,0 +1,149 @@
+train:
+  n_envs: 4
+  frame_skip: 5
+  reset_noise_scale: 0.1
+  max_episode_steps: 1000
+  # total_timesteps: 4096000
+  total_iterations: 1000
+  loco_iteration_steps: 8192
+  mode_iteration_steps: 2048
+  checkpoint_freq: 102400
+  custom_loco_log_freq: 2048
+  custom_mode_log_freq: 2048
+  # total_timesteps: 40960000
+  # checkpoint_freq: 102400
+  # custom_log_freq: 2048
+
+demo:
+  demo_type: "rgb_array" 
+  camera_pos: "0 -1.6 1.3"
+  camera_xyaxes: "1 0 0 0 1 1"
+  mjc_render_width: 150
+  mjc_render_height: 150
+  plt_n_cols: 3
+  plt_n_lines: 1
+  plt_x_range: 100
+
+control:
+  control_type: "generate"
+  generator_theta: 1.0
+  generator_smooth_order: 8
+  generator_schedule: [
+    {
+      "name": "robot_x_velocity",
+      "clip": [0.0, 10.0],
+      "avg": [0.0, 2.0, 2.0, 1.5, 6.0, 3.0, 9.0, 5.0, 5.0],
+      "amp": [0.0, 0.0, 2.0, 2.5, 2.0, 5.0, 1.0, 7.0, 7.0],
+    },
+    {
+      "name": "robot_y_velocity",
+      "clip": [-5, 5],
+      "avg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "amp": [0.0, 0.0, 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
+    },
+    {
+      "name": "z_angular_velocity",
+      "clip": [-3.14, 3.14],
+      "avg": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+      "amp": [0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.5, 1.5, 1.5],
+    },
+  ]
+
+reward:
+  alive_weight: 0.2
+  illegal_contact_weight: -1.0
+  robot_xy_velocity_weight: 5.0
+  z_angular_velocity_weight: 2.0
+  z_velocity_weight: -2.0
+  z_position_weight: -5.0
+  xy_angular_velocity_weight: -0.05
+  xy_angular_weight: -5.0
+  action_change_weight: -0.05
+  hinge_angular_velocity_weight: -0.001
+  hinge_position_weight: -1.0
+  hinge_exceed_limit_weight: -5.0
+  hinge_energy_weight: -2.0e-5
+  gait_loop_weight: 1.0
+  foot_state_duration_weight: 1.0
+  foot_sliding_velocity_weight: -0.2
+  foot_lift_height_weight: 1.0
+
+  z_position_target: 0.3
+  hinge_position_std: 0.2
+  hinge_exceed_limit_ratio: 0.95
+  gait_loop_k: 0.25
+  foot_state_k: 0.05
+  foot_lift_height_target: 0.1
+
+algorithm:
+  loco:
+    policy: "MlpPolicy"
+    policy_kwargs:
+      activation_fn: "ELU"
+      net_arch:
+        pi: [512, 256, 128]
+        vf: [512, 256, 128]
+    n_steps: 512
+    batch_size: 64
+    n_epochs: 10
+    learning_rate: 5.e-4
+    clip_range: 0.2
+    vf_coef: 0.5
+    gamma: 0.99
+    gae_lambda: 0.95
+  mode:
+    policy: "MlpPolicy"
+    policy_kwargs:
+      activation_fn: "ELU"
+      net_arch:
+        pi: [64, 32]
+        vf: [64, 32]
+    n_steps: 512
+    batch_size: 64
+    n_epochs: 10
+    learning_rate: 5.e-4
+    clip_range: 0.2
+    vf_coef: 0.5
+    gamma: 0.99
+    gae_lambda: 0.95
+  device: "cpu"
+  verbose: 1
+
+path:
+  output: ".\\output\\"
+  model_dir_original: ".\\assets\\mujoco_menagerie\\unitree_go1\\"
+  model_dir_modified: ".\\assets\\model\\"
+  loco_env_py: ".\\src\\env\\mode_conditioned_locomotion_env.py"
+  mode_env_py: ".\\src\\env\\mode_selection_env.py"
+
+is:
+  param_shared: True
+  model_camera_modified: False
+  model_body_part_visiable: False
+  model_obs_space_visiable: False
+  model_action_space_visiable: False
+
+tensorboard_items:
+  loco:
+    alive_reward: 0
+    illegal_contact_penalty: 0
+    robot_xy_velocity_reward: 0
+    robot_x_velocity_l2_exp: 0
+    robot_y_velocity_l2_exp: 0
+    z_angular_velocity_l2_exp: 0
+    z_angular_velocity_reward: 0
+    z_velocity_penalty: 0
+    z_position_penalty: 0
+    xy_angular_velocity_penalty: 0
+    xy_angular_penalty: 0
+    action_change_penalty: 0
+    hinge_angular_velocity_penalty: 0
+    hinge_position_penalty: 0
+    hinge_exceed_limit_penalty: 0
+    hinge_energy_penalty: 0
+    gait_loop_reward: 0
+    foot_state_duration_reward: 0
+    foot_sliding_velocity_penalty: 0
+    foot_lift_height_reward: 0
+  mode:
+  
