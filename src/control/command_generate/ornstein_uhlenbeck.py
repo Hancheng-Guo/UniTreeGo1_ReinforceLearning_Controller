@@ -23,4 +23,4 @@ class OUProcess:
         self.x = 0.
         for _ in range(self.order-1):
             self.memory.append(0.)
-        return 0.
+        return 0.   # equal to np.sum(self.memory) / self.order

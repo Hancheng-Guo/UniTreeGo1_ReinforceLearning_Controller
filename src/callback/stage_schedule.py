@@ -177,9 +177,10 @@ class FlatStageScheduleCallback(BaseCallback, StageScheduler):
 
 
 class HierarchicalStage(IntEnum):
-    loco_training = 0
-    cross_training = 1
-    done = 2
+    loco_idle_training = 0
+    loco_move_training = 1
+    cross_move_training = 2
+    done = 3
 
 
 class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
