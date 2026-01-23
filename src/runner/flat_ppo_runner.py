@@ -2,11 +2,11 @@ import os
 import numpy as np
 import yaml
 
-from src.callback.base import CustomCheckpointCallback
+from src.callback.base import FlatCheckpointCallback
 from src.callback.base import AdaptiveLRCallback
 from src.callback.base import TrainProgressCallback, TestProgressCallback
 from src.callback.base import CustomTensorboardCallback
-from src.callback.base import StageScheduleCallback
+from src.callback.base import FlatStageScheduleCallback
 from src.callback.base import RenderSaverCallback
 
 from src.runner.common.ppo_runner import PPOTrainer, PPOTester
@@ -36,10 +36,10 @@ class FlatPPORunner(PPOTrainer, PPOTester):
         # Start model training process
         self.model.learn(**self.training_kwargs,
                          callback=[TrainProgressCallback(**self.callback_kwargs),
-                                   StageScheduleCallback(**self.callback_kwargs),
+                                   FlatStageScheduleCallback(**self.callback_kwargs),
                                    CustomTensorboardCallback(**self.callback_kwargs),
                                    AdaptiveLRCallback(**self.callback_kwargs),
-                                   CustomCheckpointCallback(**self.callback_kwargs)])
+                                   FlatCheckpointCallback(**self.callback_kwargs)])
         
         self.train_env_close()  # Clean up resources
 

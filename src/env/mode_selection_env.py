@@ -70,13 +70,13 @@ class ModeSelectionEnv(gym.Env):
         reward = 0.
 
         info = {
-            "loco_info": loco_info,
             "loco_reward": loco_reward,
+            "loco_info": loco_info,
         }
         
         return obs, reward, terminated, False, info
 
-
+    
 
     def render(self):
         pass
@@ -84,7 +84,8 @@ class ModeSelectionEnv(gym.Env):
     def close(self):
         pass
 
-
+    def set_stage(self, stage):
+        self.loco_env.env.env.env.set_stage(stage)
     
 
     # def __init__(

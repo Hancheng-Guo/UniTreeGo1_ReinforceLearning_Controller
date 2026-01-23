@@ -42,11 +42,13 @@ class ThreadTensorBoard():
 
 class CustomTensorboardCallback(BaseCallback):
     def __init__(self,
+                 log_prefix: str = "custom",
                  log_freq: int = 2048,
                  tensorboard_items: dict = {},
                  verbose: int = 0,
                  **kwargs):
         super().__init__(verbose)
+        self.prefix = log_prefix
         self.writer = None
         self.log_freq = log_freq
         self.tensorboard_items = tensorboard_items if tensorboard_items is not None else {}
@@ -89,7 +91,7 @@ class CustomTensorboardCallback(BaseCallback):
         return True
     
     def _tb_log_name(self, key, suffix):
-        return f"custom/{key}_{suffix}"
+        return f"{self.prefix}/{key}_{suffix}"
     
     def _data_reset(self):
         self.data = [{key: value for key, value in self.tensorboard_items.items()}

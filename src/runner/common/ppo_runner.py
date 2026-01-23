@@ -11,7 +11,6 @@ from src.callback.base import ThreadTensorBoard
 import matplotlib.pyplot as plt
 
 from src.runner.common.display_obs import get_qpos, get_qvel
-from src.callback.base import Stage
 
 from stable_baselines3.common.env_util import make_vec_env
 from src.config.base import update_config, get_config
@@ -244,7 +243,7 @@ class PPOTrainer(PPORunner):
             base_stage = np.load(base_stage_path)
         except:
             # Default to idle stage if file doesn't exist or can't be loaded
-            base_stage = Stage.idle
+            base_stage = 0.
         
         # Construct the callback keyword arguments dictionary
         self.callback_kwargs = {

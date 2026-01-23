@@ -4,6 +4,7 @@ from stable_baselines3.common.callbacks import BaseCallback
 class AdaptiveLRCallback(BaseCallback):
     def __init__(self,
                  init_lr: float,
+                 lr_prefix: str = "train",
                  smooth_step_len: int = 2048,
                  kl_min: float = 0.01,
                  kl_max: float = 0.2,
@@ -14,6 +15,7 @@ class AdaptiveLRCallback(BaseCallback):
                  **kwargs):
         super().__init__(verbose)
         self.init_lr = init_lr
+        self.prefix = lr_prefix
         self.kl_min = kl_min
         self.kl_max = kl_max
         self.lr_min = lr_min
@@ -49,7 +51,7 @@ class AdaptiveLRCallback(BaseCallback):
     
 
     def _on_rollout_end(self, **kwargs) -> bool:
-        kl = self.logger.name_to_value.get("train/approx_kl")
+        kl = self.logger.name_to_value.get(f"{self.prefix}/approx_kl")
         if kl is not None:
             current_lr = self.model.lr_schedule(self.model._current_progress_remaining)
             if current_lr == self.target_lr:

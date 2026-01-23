@@ -49,7 +49,7 @@ class ModeConditionedLocomotionEnv(AntEnv):
                          height=height)
 
         # for stage
-        self.stage = 0 # update in callback
+        self.stage = 0. # update in callback
         # for reward
         self.action = None
         self.action_old = None
@@ -109,6 +109,8 @@ class ModeConditionedLocomotionEnv(AntEnv):
         is_alive = reward_info["is_alive"]
         return reward, reward_info, is_alive
     
+    def set_stage(self, stage):
+        self.stage = stage
 
     def _dispatch(self, event_name, *args, **kwargs):
         for cb in self.callbacks:

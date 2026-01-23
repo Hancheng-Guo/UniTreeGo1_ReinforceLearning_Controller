@@ -1,6 +1,7 @@
 from stable_baselines3.common.callbacks import BaseCallback
 from src.callback.common.test_base_callback import TestBaseCallback
 from src.callback.common.iter_base_callback import IterBaseCallback
+from stable_baselines3.ppo.ppo import PPO
 
 
 class ProgressBar():
@@ -121,16 +122,33 @@ class TestProgressCallback(TestBaseCallback):
 
 class IterProgressCallback(IterBaseCallback):
     def __init__(self,
-                 rollout_steps: int,
-                 custom_str: str,
                  n_rollouts: int,
+                 loco_rollout_steps: int,
+                 mode_rollout_steps: int,
+                 loco_model: PPO,
+                 mode_model: PPO,
                  verbose: int = 0,
                  **kwargs):
         super().__init__(verbose)
-        self.bar = ProgressBar(total=rollout_steps, custom_str=custom_str, call_times_total=n_rollouts)
+        self.loco_rollout_steps = loco_rollout_steps
+        self.mode_rollout_steps = mode_rollout_steps
+        self.bar = ProgressBar(total=max(self.loco_rollout_steps, self.mode_rollout_steps),
+                               call_times_total=n_rollouts)
+        self.loco_model = loco_model
+        self.mode_model = mode_model
         self.current_step = None
 
-    def _on_iteration_start(self, **kwargs) -> bool:
+    def _on_iteration_start(self, model: PPO, **kwargs) -> bool:
+        if model == self.loco_model:
+            custom_str = "Loco-Rollout"
+            rollout_steps = self.loco_rollout_steps
+        elif model == self.mode_model:
+            custom_str = "Mode-Rollout"
+            rollout_steps = self.mode_rollout_steps
+        else:
+            raise ValueError("model is not in [loco_model, mode_model]")
+        self.bar.custom_str = custom_str
+        self.bar.total = rollout_steps
         return True
 
     def _on_training_start(self, **kwargs) -> bool:

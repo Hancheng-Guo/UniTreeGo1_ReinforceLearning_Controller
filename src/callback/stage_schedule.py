@@ -1,20 +1,10 @@
 import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
+from src.callback.common.iter_base_callback import IterBaseCallback
 from collections import deque
 from enum import IntEnum
 from functools import partial
-
-
-class Stage(IntEnum):
-    idle = 0
-    trot_a = 1
-    trot_b = 2
-    trot_c = 3
-    canter_a = 4
-    canter_b = 5
-    gallop_a = 6
-    gallop_b = 7
-    done = 8
+from stable_baselines3.ppo.ppo import PPO
 
 
 def smoothstep_Cinf(x, a=0.0, b=1.0, scale=1.0, alpha=1.0):
@@ -80,7 +70,38 @@ class SmoothStep():
         return fun
     
 
-class StageScheduleCallback(BaseCallback):
+
+class StageScheduler:
+    def print_info(self, info: dict|None = None):
+        if info is not None:
+            # Find max widths
+            key_width = max(map(len, info.keys()))
+            val_width = max(map(len, map("{:.3f}".format, info.values())))
+            # Write out the data
+            dashes = "-" * (key_width + val_width + 7)
+            lines = [dashes]
+            for key, value in info.items():
+                key_space = " " * (key_width - len(key))
+                val_space = " " * (val_width - len("{:.3f}".format(value)))
+                lines.append(f"| {key}{key_space} | {"{:.3f}".format(int(value*1000)/1000)}{val_space} |")
+            lines.append(dashes)
+            for line in lines:
+                print(line)
+
+
+class FlatStage(IntEnum):
+    idle = 0
+    trot_a = 1
+    trot_b = 2
+    trot_c = 3
+    canter_a = 4
+    canter_b = 5
+    gallop_a = 6
+    gallop_b = 7
+    done = 8
+
+
+class FlatStageScheduleCallback(BaseCallback, StageScheduler):
     def __init__(self,
                  base_stage: float,
                  verbose: int = 0,
@@ -91,9 +112,9 @@ class StageScheduleCallback(BaseCallback):
 
         self.ep_lengths = None
         self.ep_lengths_fun = SmoothStep(
-            {0.0:   Stage.idle,
-             500.0: Stage.trot_a,
-             800.0: Stage.done})
+            {0.0:   FlatStage.idle,
+             500.0: FlatStage.trot_a,
+             800.0: FlatStage.done})
         
         self.robot_x_velocity = None
         self.robot_y_velocity = None
@@ -112,7 +133,7 @@ class StageScheduleCallback(BaseCallback):
     
     def _on_rollout_start(self, **kwargs) -> bool:
         for env in self.model.env.venv.envs:
-            env.env.env.env.env.stage = self.stage
+            env.env.env.env.env.set_stage(self.stage)
         return True
     
     def _on_step(self, **kwargs) -> bool:
@@ -151,19 +172,102 @@ class StageScheduleCallback(BaseCallback):
             "stage_robot_y_velocity": stage_robot_y_velocity,
             "stage_z_angular_velocity": stage_z_angular_velocity,
         }
-        if info:
-            # Find max widths
-            key_width = max(map(len, info.keys()))
-            val_width = max(map(len, map("{:.3f}".format, info.values())))
-            # Write out the data
-            dashes = "-" * (key_width + val_width + 7)
-            lines = [dashes]
-            for key, value in info.items():
-                key_space = " " * (key_width - len(key))
-                val_space = " " * (val_width - len("{:.3f}".format(value)))
-                lines.append(f"| {key}{key_space} | {"{:.3f}".format(int(value*1000)/1000)}{val_space} |")
-            lines.append(dashes)
-            for line in lines:
-                print(line)
+        self.print_info(info)
+        return True
 
+
+class HierarchicalStage(IntEnum):
+    loco_training = 0
+    cross_training = 1
+    done = 2
+
+
+class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
+    def __init__(self,
+                 base_stage: float,
+                 loco_model: PPO,
+                 mode_model: PPO,
+                 loco_iteration_rollouts: int,
+                 mode_iteration_rollouts: int,
+                 winlen_iterations: int = 20,
+                 verbose: int = 0,
+                 **kwargs):
+        super().__init__(verbose)
+        self.stage = base_stage
+        self.loco_model = loco_model
+        self.mode_model = mode_model
+        self.loco_iteration_rollouts = loco_iteration_rollouts
+        self.mode_iteration_rollouts = mode_iteration_rollouts
+        self.winlen = None
+        self.winlen_iterations = winlen_iterations
+
+        self.ep_lengths = None
+        self.ep_lengths_fun = SmoothStep({0.0: 0, 750.0: 1})
+        
+        self.robot_x_velocity = None
+        self.robot_y_velocity = None
+        self.z_angular_velocity = None
+        self.robot_x_velocity_fun = SmoothStep({0.0: 0, 0.95: 1})
+        self.robot_y_velocity_fun = SmoothStep({0.0: 0, 0.95: 1})
+        self.z_angular_velocity_fun = SmoothStep({0.0: 0, 0.95: 1})
+
+    def _on_training_start(self, **kwargs) -> bool:
+        self.winlen =  self.winlen_iterations * ((self.loco_iteration_rollouts * self.loco_model.n_steps * self.loco_model.n_envs) + 
+                                                 (self.mode_iteration_rollouts * self.mode_model.n_steps * self.mode_model.n_envs))
+        self.ep_lengths = deque(np.zeros(self.winlen_iterations), maxlen=self.winlen_iterations)
+        self.robot_x_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
+        self.robot_y_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
+        self.z_angular_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
+        return True
+    
+    def _on_iteration_start(self, model) -> bool:
+        self.model = model
+        return True
+
+    def _on_rollout_start(self, **kwargs) -> bool:
+        for env in self.loco_model.env.venv.envs:
+            env.env.env.env.env.set_stage(self.stage)
+        for env in self.mode_model.env.venv.envs:
+            env.env.env.env.env.set_stage(self.stage)
+        return True
+    
+    def _on_step(self, **kwargs) -> bool:
+        for info in self.locals.get("infos", []):
+            if "episode" in info:
+                self.ep_lengths.append(info["episode"]["l"])
+        if self.model == self.loco_model:
+            for env in self.model.env.venv.envs:
+                reward_info = env.env.env.env.env.reward.reward_info
+                self.robot_x_velocity.append(reward_info["robot_x_velocity_l2_exp"])
+                self.robot_y_velocity.append(reward_info["robot_y_velocity_l2_exp"])
+                self.z_angular_velocity.append(reward_info["z_angular_velocity_l2_exp"])
+        return True
+    
+    def _on_rollout_end(self, **kwargs) -> bool:
+        stage_robot_x_velocity = (int(self.stage) +
+            self.robot_x_velocity_fun(np.mean(self.robot_x_velocity)))
+        
+        stage_robot_y_velocity = (int(self.stage) +
+            self.robot_y_velocity_fun(np.mean(self.robot_y_velocity)))
+        
+        stage_z_angular_velocity = (int(self.stage) +
+            self.z_angular_velocity_fun(np.mean(self.z_angular_velocity)))
+        
+        stage_ep_lengths = (int(self.stage) + 
+            self.ep_lengths_fun(np.mean(self.ep_lengths)))
+
+        self.stage = max(min(stage_ep_lengths,
+                             stage_robot_x_velocity,
+                             stage_robot_y_velocity,
+                             stage_z_angular_velocity),
+                         self.stage)
+        
+        info = {
+            "stage": self.stage,
+            "stage_ep_lengths": stage_ep_lengths,
+            "stage_robot_x_velocity": stage_robot_x_velocity,
+            "stage_robot_y_velocity": stage_robot_y_velocity,
+            "stage_z_angular_velocity": stage_z_angular_velocity,
+        }
+        self.print_info(info)
         return True

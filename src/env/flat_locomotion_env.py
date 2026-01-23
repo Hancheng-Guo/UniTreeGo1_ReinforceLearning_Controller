@@ -104,6 +104,8 @@ class FlatLocomotionEnv(AntEnv):
         is_alive = reward_info["is_alive"]
         return reward, reward_info, is_alive
     
+    def set_stage(self, stage):
+        self.stage = stage
 
     def _dispatch(self, event_name, *args, **kwargs):
         for cb in self.callbacks:

@@ -7,7 +7,7 @@ train:
   total_iterations: 1000
   loco_iteration_steps: 8192
   mode_iteration_steps: 2048
-  checkpoint_freq: 102400
+  checkpoint_freq_iterations: 10
   custom_loco_log_freq: 2048
   custom_mode_log_freq: 2048
   # total_timesteps: 40960000

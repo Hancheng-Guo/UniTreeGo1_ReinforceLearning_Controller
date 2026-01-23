@@ -12,28 +12,33 @@ class IterBaseCallback(BaseCallback):
     def _on_iteration_end(self, **kwargs) -> bool:
         return True
     
-    def on_training_start(self, locals_: dict[str, Any], globals_: dict[str, Any]) -> None:
+    def on_training_start(self, locals_: dict[str, Any], globals_: dict[str, Any]):
         # Those are reference and will be updated automatically
         self.locals = locals_
         self.globals = globals_
         # Update num_timesteps in case training was done before
         if hasattr(self, "model") and self.model is not None:
             self.num_timesteps = self.model.num_timesteps
-        self._on_training_start()
+        return self._on_training_start()
+    
 
-
-class IterCallBackList(CallbackList, IterBaseCallback):
-    def __init__(self, callbacks: list[IterBaseCallback]):
+class IterCallBackList(IterBaseCallback, CallbackList):
+    def __init__(self, callbacks):
         super().__init__(callbacks)
 
-    def on_iteration_start(self, **kwargs) -> None:
+    def on_iteration_start(self, **kwargs) -> bool:
+        ret = True
         for callback in self.callbacks:
             fn = getattr(callback, "_on_iteration_start", None)
             if fn is not None:
-                fn(**kwargs)
+                ret = ret and fn(**kwargs)
+        return ret
 
-    def on_iteration_end(self, **kwargs) -> None:
+    def on_iteration_end(self, **kwargs) -> bool:
+        ret = True
         for callback in self.callbacks:
             fn = getattr(callback, "_on_iteration_end", None)
             if fn is not None:
-                fn(**kwargs)
+                ret = ret and fn(**kwargs)
+        return ret
+
