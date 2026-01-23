@@ -38,8 +38,8 @@ class ModeSelectionEnv(gym.Env):
         self._init_space()
 
     def _init_space(self):
-        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(40,), dtype=np.float64)
-        self.action_space = Box(low=0.0, high=1.0, shape=(len(mode),), dtype=np.float64)
+        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(40,), dtype=np.float32)
+        self.action_space = Box(low=0.0, high=1.0, shape=(len(mode),), dtype=np.float32)
 
 
     def reset(self, *, seed=None, options=None):
@@ -51,7 +51,7 @@ class ModeSelectionEnv(gym.Env):
         obs = np.concatenate([self.loco_obs["qpos"],
                               self.loco_obs["qvel"],
                               self.loco_obs["control_vector"]])
-        return obs, {}
+        return obs.astype(np.float32), {}
 
     def step(self, action):
         action /= np.maximum(np.sum(action), 1.)
@@ -74,7 +74,7 @@ class ModeSelectionEnv(gym.Env):
             "loco_info": loco_info,
         }
         
-        return obs, reward, terminated, False, info
+        return obs.astype(np.float32), reward, terminated, False, info
 
     
 

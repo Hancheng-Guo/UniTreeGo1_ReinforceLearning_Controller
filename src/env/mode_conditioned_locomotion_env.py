@@ -133,7 +133,7 @@ class ModeConditionedLocomotionEnv(AntEnv):
         _add_obs_item("foot_landed_time", self._feet_landed_time)
         _add_obs_item("foot_airborne_time", self._feet_airborne_time)
         
-        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
+        self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float32)
 
     def _get_obs(self):
         obs = super()._get_obs()
@@ -152,7 +152,7 @@ class ModeConditionedLocomotionEnv(AntEnv):
             discontructed_obs["mode_vector"] = mode_obs
             obs = np.concatenate([value for value in discontructed_obs.values()])
 
-        return obs
+        return obs.astype(np.float32)
 
     def _get_feet_obs(self):
         for i, is_touching in enumerate(rwd.are_foot_touching_ground(self)):
