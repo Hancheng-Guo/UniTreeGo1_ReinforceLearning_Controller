@@ -18,26 +18,26 @@ feet = ["FR", "FL", "RR", "RL"]
 
 class ModeConditionedLocomotionEnv(AntEnv):
     def __init__(
-            self,
-            xml_file: str,
-            mode_model: PPO = None,
-            frame_skip: int = 5,
-            main_body: int | str = 1,
-            reset_noise_scale: float = 0.1,
-            exclude_current_positions_from_observation: bool = False,
-            include_cfrc_ext_in_observation: bool = True,
+        self,
+        xml_file: str,
+        mode_model: PPO = None,
+        frame_skip: int = 5,
+        main_body: int | str = 1,
+        reset_noise_scale: float = 0.1,
+        exclude_current_positions_from_observation: bool = False,
+        include_cfrc_ext_in_observation: bool = True,
 
-            render_mode: str = None,
-            plt_n_cols:  int = 4,
-            plt_n_lines: int = 1,
-            plt_x_range: int = 200,
-            width: int = 480,
-            height: int = 480,
+        render_mode: str = None,
+        plt_n_cols:  int = 4,
+        plt_n_lines: int = 1,
+        plt_x_range: int = 200,
+        width: int = 480,
+        height: int = 480,
 
-            reward_config: dict = {},
-            control_config: dict = {},
+        reward_config: dict = {},
+        control_config: dict = {},
 
-            **kwargs):
+        **kwargs):
 
         super().__init__(xml_file=xml_file,
                          frame_skip=frame_skip,

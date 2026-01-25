@@ -15,7 +15,7 @@ from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
 feet = ["FR", "FL", "RR", "RL"]
 mode = ["idle",
-        "Pace",
+        "pace",
         "walk",
         "trot",
         "canter",

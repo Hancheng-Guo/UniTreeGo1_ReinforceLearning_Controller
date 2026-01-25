@@ -12,7 +12,7 @@ from src.callback.base import RenderSaverCallback
 from src.config.base import update_config, get_config
 from stable_baselines3.common.env_util import make_vec_env
 from src.runner.common.ppo_runner import PPOTrainer, PPOTester
-from src.runner.common.dummy_logger import LoggerProxy
+from src.runner.common.logger_proxy import LoggerProxy
 from src.callback.base import IterCallBackList
 from stable_baselines3.common.vec_env import VecNormalize
 

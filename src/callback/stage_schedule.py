@@ -182,6 +182,33 @@ class HierarchicalStage(IntEnum):
     cross_move_training = 2
     done = 3
 
+class DummyModeModel:
+    def __init__(self, mode_model):
+        self._mode_model = mode_model
+        self.mode_len = 250
+        self.mode_count = 0
+        self.mode = None
+        
+    def __getattr__(self, name):
+        return getattr(self._mode_model, name)
+    
+    def predict(self, obs, *args, **kwargs):
+        control_obs = obs[37:40]
+        if control_obs.any():   # not idle
+            if self.mode_count <= 0:
+                rdn = int(np.random.rand() * (self._mode_model.action_space.shape[0] - 1)) + 1
+                self.mode_count = self.mode_len
+                self.mode = np.eye(self._mode_model.action_space.shape[0], dtype=np.float32)[rdn]
+            else:
+                self.mode_count -= 1
+            mode_action = self.mode
+        else:   # idle
+            mode_action = np.eye(self._mode_model.action_space.shape[0], dtype=np.float32)[0]
+
+        mode_action += np.random.randn(self._mode_model.action_space.shape[0]).astype(np.float32) * 0.05
+        mode_action /= np.maximum(np.sum(mode_action), 1.)
+        return mode_action, {}
+
 
 class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
     def __init__(self,
@@ -212,6 +239,8 @@ class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
         self.robot_y_velocity_fun = SmoothStep({0.0: 0, 0.95: 1})
         self.z_angular_velocity_fun = SmoothStep({0.0: 0, 0.95: 1})
 
+        self.mode_model_for_loco = self.loco_model.env.venv.envs[0].env.env.env.env.mode_model
+
     def _on_training_start(self, **kwargs) -> bool:
         self.winlen =  self.winlen_iterations * ((self.loco_iteration_rollouts * self.loco_model.n_steps * self.loco_model.n_envs) + 
                                                  (self.mode_iteration_rollouts * self.mode_model.n_steps * self.mode_model.n_envs))
@@ -223,9 +252,22 @@ class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
     
     def _on_iteration_start(self, model) -> bool:
         self.model = model
+
+        if self.model == self.mode_model and self.stage < 2:
+            return False
         return True
 
     def _on_rollout_start(self, **kwargs) -> bool:
+        if not isinstance(self.mode_model_for_loco, DummyModeModel) and self.stage < 2:
+            for env in self.loco_model.env.venv.envs:
+                env.env.env.env.env.mode_model = DummyModeModel(self.mode_model_for_loco)
+            self.mode_model_for_loco = self.loco_model.env.venv.envs[0].env.env.env.env.mode_model
+
+        if isinstance(self.mode_model_for_loco, DummyModeModel) and self.stage >= 2:
+            for env in self.loco_model.env.venv.envs:
+                env.env.env.env.env.mode_model = env.env.env.env.env.mode_model._mode_model
+            self.mode_model_for_loco = self.loco_model.env.venv.envs[0].env.env.env.env.mode_model
+
         for env in self.loco_model.env.venv.envs:
             env.env.env.env.env.set_stage(self.stage)
         for env in self.mode_model.env.venv.envs:
