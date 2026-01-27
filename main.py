@@ -5,8 +5,9 @@ os.environ["TORCH_DYNAMO_DISABLE"] = "1"
 from glfw import GLFWError
 import warnings
 warnings.filterwarnings("ignore", category=GLFWError)
+warnings.filterwarnings("ignore", category=FutureWarning, module="keras")
 
-from src.runners.run_ppo import ppo_train, ppo_test
+from src.runner.base import ppo_train, ppo_test
 
 
 if __name__ == "__main__":
