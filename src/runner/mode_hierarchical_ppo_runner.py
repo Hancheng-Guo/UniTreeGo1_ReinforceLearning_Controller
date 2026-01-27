@@ -1,4 +1,5 @@
 import os
+import re
 import numpy as np
 import yaml
 from torch import nn
@@ -97,7 +98,7 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
 
                 if self.loco_model.num_timesteps % self.loco_iteration_steps == 0:
                     break
-            self.loco_callback.on_iteration_end()
+            self.loco_callback.on_iteration_end(model=self.loco_model)
 
             train_mode = self.mode_callback.on_iteration_start(model=self.mode_model)
             while train_mode:
@@ -118,12 +119,45 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
 
                 if self.mode_model.num_timesteps % self.mode_iteration_steps == 0:
                     break
-            self.mode_callback.on_iteration_end()
+            self.mode_callback.on_iteration_end(model=self.mode_model)
 
         self.loco_model._logger = self.loco_model._logger._logger
         self.mode_model._logger = self.mode_model._logger._logger
         self.loco_callback.on_training_end()
         self.mode_callback.on_training_end()
+
+    
+    def check_base_name(self):
+        if self.base_name:
+            # Check if the base name matches the date_time_number format, e.g., 2022-01-01_12-30-45_1
+            pattern = re.compile(r'^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(\d+)$')
+            match = pattern.match(self.base_name)
+            if match:
+                self.base_dir = os.path.join(self.config["path"]["output"], match.group(1))
+                return
+            else:
+                pattern = re.compile(r'^(mdl|env)_(mode|loco)_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})_(\d+)\.(zip|pkl)$')
+                index = []
+                base_folder = os.path.join(self.config["path"]["output"], self.base_name)
+
+                if os.path.exists(base_folder):
+                    # Iterate through all files in the base name directory to find matching files
+                    for filename in os.listdir(base_folder):
+                        match = pattern.match(filename)
+                        if match:
+                            # Extract the numeric part from the filename and add to the index list
+                            index.append(int(match.group(4)))
+                    # Sort the index in descending order
+                    index.sort(reverse=True)
+                    # Get the maximum value of duplicate indices (containing both .zip and .pkl)
+                    for i in range(len(index) - 3):
+                        if np.unique(index[i:i+4]).size == 1:
+                            self.base_dir = os.path.join(self.config["path"]["output"], self.base_name)
+                            self.base_name = f"{self.base_name}_{index[i]}"
+                            return
+                        
+        self.base_name = None
+        self.base_dir = None
 
 
     def get_algorithm_kwargs(self):
@@ -250,9 +284,11 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
         kwargs.update(tensorboard_log=None if tensorboard_skip else self.save_dir)
         self.mode_model, self.mode_train_env = super().load_model(self.mode_train_env,
                                                                   {**self.algorithm_kwargs, **self.mode_algorithm_kwargs},
+                                                                  interfix="mode",
                                                                   **kwargs)
         self.loco_model, self.loco_train_env = super().load_model(self.loco_train_env,
                                                                   {**self.algorithm_kwargs, **self.loco_algorithm_kwargs},
+                                                                  interfix="loco",
                                                                   **kwargs)
         self.display_train_env(self.loco_train_env.venv.envs[0].env)
         
@@ -267,7 +303,7 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
             self.loco_env_for_mode.append(loco_env)
             env.env.env.env.env.loco_env = loco_env
             env.env.env.env.env.loco_normalize_obs = self.loco_train_env.normalize_obs
-            env.env.env.env.env.loco_discontruct_obs = loco_env.env.env.env._discontruct_obs
+            env.env.env.env.env.loco_decontruct_obs = loco_env.env.env.env._decontruct_obs
             env.env.env.env.env.loco_model = self.loco_model
         
             

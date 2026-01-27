@@ -46,7 +46,7 @@ class ModeSelectionEnv(gym.Env):
         super().reset(seed=seed, options=options)
         loco_obs, _ = self.loco_env.reset()
         loco_obs = self.loco_normalize_obs(loco_obs)
-        self.loco_obs = self.loco_discontruct_obs(loco_obs)
+        self.loco_obs = self.loco_decontruct_obs(loco_obs)
 
         obs = np.concatenate([self.loco_obs["qpos"],
                               self.loco_obs["qvel"],
@@ -61,7 +61,7 @@ class ModeSelectionEnv(gym.Env):
         loco_obs, loco_reward, terminated, _, loco_info = self.loco_env.step(loco_action)
         
         loco_obs = self.loco_normalize_obs(loco_obs)
-        self.loco_obs = self.loco_discontruct_obs(loco_obs)
+        self.loco_obs = self.loco_decontruct_obs(loco_obs)
 
         obs = np.concatenate([self.loco_obs["qpos"],
                               self.loco_obs["qvel"],

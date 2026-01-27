@@ -231,10 +231,11 @@ class HierarchicalCheckpointCallback(IterBaseCallback, CustomCheckpoint):
         self._save_checkpoint()
         return True
     
-    def _on_iteration_end(self, **kwargs):
-        self.n_interations += 1
-        if self.n_interations % self.save_freq_iterations == 0:
-            self._save_checkpoint()
+    def _on_iteration_end(self, model, **kwargs) -> bool:
+        if model == self.mode_model:
+            self.n_interations += 1
+            if self.n_interations % self.save_freq_iterations == 0:
+                self._save_checkpoint()
         return True
     
     @property

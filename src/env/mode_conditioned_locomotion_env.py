@@ -143,7 +143,7 @@ class ModeConditionedLocomotionEnv(AntEnv):
         obs = np.concatenate((obs, control_obs.flatten(), mode_obs.flatten(), feet_obs.flatten()))
 
         if self.mode_model is not None:
-            discontructed_obs = self._discontruct_obs(obs)
+            discontructed_obs = self._decontruct_obs(obs)
             obs_for_mode_model = np.concatenate([discontructed_obs["qpos"],
                                                  discontructed_obs["qvel"],
                                                  discontructed_obs["control_vector"]])
@@ -160,7 +160,7 @@ class ModeConditionedLocomotionEnv(AntEnv):
             self._feet_airborne_time[i] = 0 if is_touching else self._feet_airborne_time[i] + 1
         return np.concatenate((self._feet_landed_time.flatten(), self._feet_airborne_time.flatten()))
     
-    def _discontruct_obs(self, obs):
+    def _decontruct_obs(self, obs):
         discontructed_obs = {}
         obs_count = 0
         obs = obs.squeeze() if len(obs.shape) > 1 else obs

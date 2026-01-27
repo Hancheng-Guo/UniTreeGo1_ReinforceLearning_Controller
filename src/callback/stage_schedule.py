@@ -205,7 +205,7 @@ class DummyModeModel:
         else:   # idle
             mode_action = np.eye(self._mode_model.action_space.shape[0], dtype=np.float32)[0]
 
-        mode_action += np.random.randn(self._mode_model.action_space.shape[0]).astype(np.float32) * 0.05
+        mode_action += np.abs(np.random.randn(self._mode_model.action_space.shape[0]).astype(np.float32) * 0.025)
         mode_action /= np.maximum(np.sum(mode_action), 1.)
         return mode_action, {}
 
@@ -248,6 +248,12 @@ class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
         self.robot_x_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
         self.robot_y_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
         self.z_angular_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
+
+        for env in self.loco_model.env.venv.envs:
+            env.env.env.env.env.set_stage(self.stage)
+        for env in self.mode_model.env.venv.envs:
+            env.env.env.env.env.set_stage(self.stage)
+
         return True
     
     def _on_iteration_start(self, model) -> bool:

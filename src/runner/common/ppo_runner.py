@@ -113,6 +113,7 @@ class PPORunner:
                    env: gym.Env,
                    algorithm_kwargs: dict = {},
                    prefix: str = "",
+                   interfix: str = "",
                    **kwargs):
         """Load an existing model or create a new one based on configuration.
         
@@ -131,8 +132,9 @@ class PPORunner:
         """
         if self.base_name:
             prefix = f"{prefix}_" if prefix else ""
-            base_model = os.path.join(self.base_dir, f"{prefix}mdl_{self.base_name}.zip")
-            base_env = os.path.join(self.base_dir, f"{prefix}env_{self.base_name}.pkl")
+            interfix = f"{interfix}_" if interfix else ""
+            base_model = os.path.join(self.base_dir, f"{prefix}mdl_{interfix}{self.base_name}.zip")
+            base_env = os.path.join(self.base_dir, f"{prefix}env_{interfix}{self.base_name}.pkl")
             env = VecNormalize.load(base_env, env)
             algorithm_kwargs.pop("policy", None)
             algorithm_kwargs.pop("policy_kwargs", None)
