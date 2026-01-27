@@ -6,31 +6,6 @@ from stable_baselines3.common.callbacks import BaseCallback
 from torch.utils.tensorboard import SummaryWriter
 
 
-target_items = {
-    "stage": 0,
-    "alive_reward": 0,
-    "illegal_contact_penalty": 0,
-    "robot_xy_velocity_reward": 0,
-    "robot_x_velocity_l2_exp": 0,
-    "robot_y_velocity_l2_exp": 0,
-    "z_angular_velocity_l2_exp": 0,
-    "z_angular_velocity_reward": 0,
-    "z_velocity_penalty": 0,
-    "z_position_penalty": 0,
-    "xy_angular_velocity_penalty": 0,
-    "xy_angular_penalty": 0,
-    "action_change_penalty": 0,
-    "hinge_angular_velocity_penalty": 0,
-    "hinge_position_penalty": 0,
-    "hinge_exceed_limit_penalty": 0,
-    "hinge_energy_penalty": 0,
-    "gait_loop_reward": 0,
-    "foot_state_duration_reward": 0,
-    "foot_sliding_velocity_penalty": 0,
-    "foot_lift_height_reward": 0,
-}
-
-
 class ThreadTensorBoard(): 
     def __init__(self,
                  log_path: str = ".",):
@@ -67,32 +42,36 @@ class ThreadTensorBoard():
 
 class CustomTensorboardCallback(BaseCallback):
     def __init__(self,
+                 log_prefix: str = "custom",
                  log_freq: int = 2048,
-                 verbose=0,
+                 tensorboard_items: dict = {},
+                 verbose: int = 0,
                  **kwargs):
         super().__init__(verbose)
+        self.prefix = log_prefix
         self.writer = None
         self.log_freq = log_freq
+        self.tensorboard_items = tensorboard_items if tensorboard_items is not None else {}
         self.rollout_index = None
         self.data = None
 
-    def _on_training_start(self) -> bool:
+    def _on_training_start(self, **kwargs) -> bool:
         self.writer = [SummaryWriter(os.path.join(self.logger.dir,  f"env_{env_id}"))
                        for env_id in range(self.model.n_envs)]
         self.log_freq = min((-self.log_freq % self.model.n_envs) + self.log_freq,
                             self.model.n_envs * self.model.n_steps)
         return True
     
-    def _on_rollout_start(self) -> bool:
+    def _on_rollout_start(self, **kwargs) -> bool:
         self.rollout_index = self.num_timesteps
         self._data_reset()
         # self._data_split()
         return True
 
-    def _on_step(self) -> bool:
+    def _on_step(self, **kwargs) -> bool:
         infos = self.locals["infos"]
         for env_id in range(self.model.n_envs):
-            for key, _ in target_items.items():
+            for key, _ in self.tensorboard_items.items():
                 self.data[env_id][key] += infos[env_id][key]
 
         timesteps_past = self.num_timesteps - self.rollout_index
@@ -101,7 +80,7 @@ class CustomTensorboardCallback(BaseCallback):
             self._data_reset()
         return True
 
-    def _on_training_end(self):
+    def _on_training_end(self, **kwargs) -> bool:
         self._data_split(step_shift=1)
         for env_id in range(self.model.n_envs):
             self.writer[env_id].close()
@@ -112,15 +91,15 @@ class CustomTensorboardCallback(BaseCallback):
         return True
     
     def _tb_log_name(self, key, suffix):
-        return f"custom/{key}_{suffix}"
+        return f"{self.prefix}/{key}_{suffix}"
     
     def _data_reset(self):
-        self.data = [{key: value for key, value in target_items.items()}
+        self.data = [{key: value for key, value in self.tensorboard_items.items()}
                      for _ in range(self.model.n_envs)]
 
     def _data_dump(self):
         for env_id in range(self.model.n_envs):
-            for key, _ in target_items.items():
+            for key, _ in self.tensorboard_items.items():
                 self.writer[env_id].add_scalar(
                     self._tb_log_name(key, "mean"),
                     self.data[env_id][key] / self.log_freq * self.model.n_envs,
@@ -129,7 +108,7 @@ class CustomTensorboardCallback(BaseCallback):
                 
     def _data_split(self, step_shift=0):
         for env_id in range(self.model.n_envs):
-            for key, _ in target_items.items():
+            for key, _ in self.tensorboard_items.items():
                 self.writer[env_id].add_scalar(
                     self._tb_log_name(key, "mean"),
                     float("inf"),

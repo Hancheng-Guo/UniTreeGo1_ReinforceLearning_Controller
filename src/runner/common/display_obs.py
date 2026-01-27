@@ -1,69 +1,36 @@
-from src.runner.common.extract_gym_env import extract_gym_env
+import mujoco
 
-
-def print_state_space(model, skipped_qpos):
-    state_count = 0
-    coordinate_str = ["w","x","y","z"]
-    n_fill = 6
-    for i in range(model.njnt):
-        jname = model.joint(i).name
-        n_fill = max(len(jname), n_fill)
-
-    print("\n")
-    print("=== QPOS ===")
-    for i in range(model.njnt):
-        jname = model.joint(i).name
-        adr = model.jnt_qposadr[i]
-        jtype = model.jnt_type[i]
+def get_qpos(model: mujoco._structs.MjModel, n_fill: int):
+    axis_str = ["w","x","y","z"]
+    qpos_str = []
+    for ijnt in range(model.njnt):
+        jname = model.joint(ijnt).name.rjust(n_fill)
+        jtype = model.jnt_type[ijnt]
         if jtype == 0:
-            for j in range(3):
-                if j < skipped_qpos: continue
-                print("[%3d] %s:  free joint > %s-axis coordinate" % (state_count, jname.rjust(n_fill), coordinate_str[(j+1) % 4]))
-                state_count += 1
-            for j in range(4):
-                print("[%3d] %s:  free joint > %s-axis direction" % (state_count, jname.rjust(n_fill), coordinate_str[j % 4]))
-                state_count += 1
+            qpos_str += ([f"{jname}:  free joint > {axis_str[(j+1) % 4]}-axis coordinate" for j in range(3)] + 
+                         [f"{jname}:  free joint > {axis_str[j % 4]}-axis direction" for j in range(4)])
         elif jtype == 1:
-            for j in range(4):
-                print("[%3d] %s:  ball joint > %s-axis rotation angle component" % (state_count, jname.rjust(n_fill), coordinate_str[j % 4]))
-                state_count += 1
+            qpos_str += [f"{jname}:  ball joint > {axis_str[j % 4]}-axis rotation angle component" for j in range(4)]
         elif jtype == 2:
-            print("[%3d] %s: slide joint > coordinate along specified axis" % (state_count, jname.rjust(n_fill)))
-            state_count += 1
+            qpos_str += [f"{jname}: slide joint > coordinate along specified axis"]
         elif jtype == 3:
-            print("[%3d] %s: hinge joint > angle of specified direction" % (state_count, jname.rjust(n_fill)))
-            state_count += 1
-        else:
-            print("display qpos rror!")
+            qpos_str += [f"{jname}: hinge joint > angle of specified direction"]
+    return qpos_str
 
-    print("=== QVEL ===")
-    for i in range(model.njnt):
-        jname = model.joint(i).name
-        adr = model.jnt_dofadr[i]
-        jtype = model.jnt_type[i]
+
+def get_qvel(model: mujoco._structs.MjModel, n_fill: int):
+    axis_str = ["w","x","y","z"]
+    qvel_str = []
+    for ijnt in range(model.njnt):
+        jname = model.joint(ijnt).name.rjust(n_fill)
+        jtype = model.jnt_type[ijnt]
         if jtype == 0:
-            for j in range(3):
-                print("[%3d] %s:  free joint > %s-axis linear velocity" % (state_count, jname.rjust(n_fill), coordinate_str[(j+1) % 4]))
-                state_count += 1
-            for j in range(3):
-                print("[%3d] %s:  free joint > %s-axis angular velocity" % (state_count, jname.rjust(n_fill), coordinate_str[(j+1) % 4]))
-                state_count += 1
+            qvel_str += ([f"{jname}:  free joint > {axis_str[(j+1) % 4]}-axis linear velocity" for j in range(3)] +
+                         [f"{jname}:  free joint > {axis_str[(j+1) % 4]}-axis angular velocity" for j in range(3)])
         elif jtype == 1:
-            for j in range(3):
-                print("[%3d] %s:  ball joint > %s-axis angular velocity" % (state_count, jname.rjust(n_fill), coordinate_str[(j+1) % 4]))
-                state_count += 1
+            qvel_str += [f"{jname}:  ball joint > {axis_str[(j+1) % 4]}-axis angular velocity" for j in range(3)]
         elif jtype == 2:
-            print("[%3d] %s: slide joint > linear velocity along specified axis" % (state_count, jname.rjust(n_fill)))
-            state_count += 1
+            qvel_str += [f"{jname}: slide joint > linear velocity along specified axis"]
         elif jtype == 3:
-            print("[%3d] %s: hinge joint > angular velocity of specified direction" % (state_count, jname.rjust(n_fill)))
-            state_count += 1
-        else:
-            print("display qvel error!")
-
-
-def display_obs(env):
-    env = extract_gym_env(env)
-    mujoco_model = env.unwrapped.model
-    skipped_qpos = env.unwrapped.observation_structure['skipped_qpos']
-    print_state_space(mujoco_model, skipped_qpos)
+            qvel_str += [f"{jname}: hinge joint > angular velocity of specified direction"]
+    return qvel_str

@@ -2,6 +2,7 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
+from src.callback.common.env_base_callback import EnvBaseCallback
 
 
 def plt_select_kwargs(state, info):
@@ -19,9 +20,9 @@ def plt_select_kwargs(state, info):
     return selected_kwargs
 
 
-class CustomMatPlotLibCallback():
+class CustomMatPlotLibCallback(EnvBaseCallback):
     def __init__(self,
-                 render_mode,
+                 render_mode: str,
                  plt_n_cols: int = 4,
                  plt_n_lines: int = 1,
                  plt_x_range: int = 200,
@@ -51,27 +52,30 @@ class CustomMatPlotLibCallback():
         self._init()
 
         
-    def _on_training_start(self, env, *args, **kwargs):
+    def _on_training_start(self, env, **kwargs) -> bool:
         self.env = env
         self.env.plt_img = None
+        return True
 
-    def _on_episode_start(self, *args, **kwargs):
+    def _on_episode_start(self, **kwargs) -> bool:
         if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
             self.reset()
+        return True
 
 
-    def _on_step(self, state, info, *args, **kwargs):
+    def _on_step(self, state: np.array, info: dict, **kwargs) -> bool:
         if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
             selected_kwargs = plt_select_kwargs(state, info)
             self._plot(selected_kwargs)
             self.fig.canvas.draw()
             plt_img = np.asarray(self.fig.canvas.renderer.buffer_rgba()).astype(np.uint8)
             self.env.plt_img = Image.fromarray(plt_img, mode="RGBA")
+        return True
 
-
-    def _on_episode_end(self, *args, **kwargs):
+    def _on_episode_end(self, **kwargs) -> bool:
         if self.render_mode in {"human", "rgb_array", "depth_array", "rgbd_tuple"}:
             self.reset()
+        return True
 
     
     def reset(self):

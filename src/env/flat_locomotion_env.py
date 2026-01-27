@@ -11,13 +11,12 @@ from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
 
 feet = ["FR", "FL", "RR", "RL"]
-hip_joints = ["FR_hip_joint", "FL_hip_joint", "RR_hip_joint", "RL_hip_joint"]
 
 
-class UniTreeGo1Env(AntEnv):
+class FlatLocomotionEnv(AntEnv):
     def __init__(
             self,
-            xml_file: str = "ant.xml",
+            xml_file: str,
             frame_skip: int = 5,
             main_body: int | str = 1,
             reset_noise_scale: float = 0.1,
@@ -30,6 +29,9 @@ class UniTreeGo1Env(AntEnv):
             plt_x_range: int = 200,
             width: int = 480,
             height: int = 480,
+
+            reward_config: dict = {},
+            control_config: dict = {},
 
             **kwargs):
 
@@ -50,11 +52,13 @@ class UniTreeGo1Env(AntEnv):
         self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
                           for foot in feet]
         self._floor_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, "floor")
-        self.reward = UniTreeGo1Reward(self, reward_config=kwargs["reward_config"])
+        self.reward = UniTreeGo1Reward(self, reward_config=reward_config)
         # for control
-        self.controller = UniTreeGo1Control(self, control_config=kwargs["control_config"])
+        self.controller = UniTreeGo1Control(self, control_config=control_config)
         self.control_vector = self.controller.get()
         # for obs
+        self._feet_landed_time = np.zeros(len(feet))
+        self._feet_airborne_time = np.zeros(len(feet))
         self._init_customize_obs()
         # for demo
         self.render_mode = render_mode
@@ -63,7 +67,7 @@ class UniTreeGo1Env(AntEnv):
                                                    plt_n_lines=plt_n_lines,
                                                    plt_x_range=plt_x_range),
                           CustomMujocoCallback(render_mode),]
-        self._dispatch("_on_training_start", self)
+        self._dispatch("_on_training_start", env=self)
         
 
     def reset(self, *, seed=None, options=None):
@@ -100,6 +104,8 @@ class UniTreeGo1Env(AntEnv):
         is_alive = reward_info["is_alive"]
         return reward, reward_info, is_alive
     
+    def set_stage(self, stage):
+        self.stage = stage
 
     def _dispatch(self, event_name, *args, **kwargs):
         for cb in self.callbacks:
@@ -110,18 +116,26 @@ class UniTreeGo1Env(AntEnv):
     # region | Obs
 
     def _init_customize_obs(self):
-        self._feet_landed_time = np.zeros(len(feet))
-        self._feet_airborne_time = np.zeros(len(feet))
-        obs_size = self.observation_space.shape[0] + 2 * len(feet) + len(self.controller)
+        obs_size = self.observation_space.shape[0]
+
+        def _add_obs_item(obs_name, obs_sample):
+            nonlocal self, obs_size
+            self.observation_structure[obs_name] = len(obs_sample)
+            obs_size += len(obs_sample)
+
+        _add_obs_item("foot_landed_time", self._feet_landed_time)
+        _add_obs_item("foot_airborne_time", self._feet_airborne_time)
+        _add_obs_item("control_vector", self.controller)
+        # _add_obs_item("gait_type", self._get_gait_obs())
         self.observation_space = Box(low=-np.inf, high=np.inf, shape=(obs_size,), dtype=np.float64)
-        self.observation_structure["foot_landed_time"] = len(feet)
-        self.observation_structure["foot_airborne_time"] = len(feet)
-        self.observation_structure["control_vector"] = len(self.controller)
+        
 
     def _get_obs(self):
         obs = super()._get_obs()
         feet_obs = self._get_feet_obs()
         control_obs = self.control_vector
+        # gait_obs = self._get_gait_obs()
+        # return np.concatenate((obs, feet_obs.flatten(), control_obs.flatten(), gait_obs.flatten()))
         return np.concatenate((obs, feet_obs.flatten(), control_obs.flatten()))
 
     def _get_feet_obs(self):
@@ -129,6 +143,12 @@ class UniTreeGo1Env(AntEnv):
             self._feet_airborne_time[i] = 0 if is_touching else self._feet_airborne_time[i] + 1
             self._feet_landed_time[i] = self._feet_landed_time[i] + 1 if is_touching else 0
         return np.concatenate((self._feet_landed_time.flatten(), self._feet_airborne_time.flatten()))
+    
+
+    # def _get_gait_obs(self):
+    #     gait_index = speed_to_gait_index(np.linalg.norm(self.control_vector[0:2]))
+    #     return np.eye(len(gait_loop_dict))[gait_index].flatten()
+
 
 # region | Control
 

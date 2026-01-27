@@ -49,12 +49,29 @@ gallop_loop_B = [{"state": 0b0100, "step": 2},
                  {"state": 0b0011, "step": 1},
                  {"state": 0b0010, "step": 1},
                  {"state": 0b0000, "step": 1},]
+
 gait_loop_dict = {
-    "idle": [idle_loop],
-    "trot": [trot_loop],
-    "canter": [canter_loop_A, canter_loop_B],
-    "gallop": [gallop_loop_A, gallop_loop_B],
+    "idle":   {"speed": [-1e-7, 1e-7], "loop": [idle_loop]},
+    "trot":   {"speed": [1e-7, 4.0],   "loop": [trot_loop]},
+    "canter": {"speed": [4.0, 8.0],    "loop": [canter_loop_A, canter_loop_B]},
+    "gallop": {"speed": [8.0, np.inf], "loop": [gallop_loop_A, gallop_loop_B]},
 }
+
+
+def speed_to_gait_name(speed: float):
+    for gait_name, gait_info in gait_loop_dict.items():
+        gait_speed = gait_info["speed"]
+        if speed >= gait_speed[0] and speed < gait_speed[1]:
+            return gait_name
+    return "idle"
+
+
+def speed_to_gait_index(speed: float):
+    for i, (_, gait_info) in enumerate(gait_loop_dict.items()):
+        gait_speed = gait_info["speed"]
+        if speed >= gait_speed[0] and speed < gait_speed[1]:
+            return np.array(i)
+    return np.array(0)
 
 
 def gait_loop_duration_tanh(rwd):
@@ -62,14 +79,7 @@ def gait_loop_duration_tanh(rwd):
 
     # get legal gait type
     velocity_control = np.linalg.norm(rwd.env.control_vector[0:2])
-    if velocity_control > 8:
-        gait_target = "gallop"
-    elif velocity_control > 4:
-        gait_target = "canter"
-    elif velocity_control > 0:
-        gait_target = "trot"
-    else:
-        gait_target = "idle"
+    gait_target = speed_to_gait_name(velocity_control)
     info["gait_target"] = gait_target
 
     # get current feet_state 
@@ -92,7 +102,8 @@ def gait_loop_duration_tanh(rwd):
         rwd.gait_type = gait_target
         # get new gait_loop_options
         rwd.gait_loop_options = []
-        for gait_loop in gait_loop_dict[gait_target]: # filt legal loop and add to gait_loop_options
+        gait_info = gait_loop_dict[gait_target]
+        for gait_loop in gait_info["loop"]: # filt legal loop and add to gait_loop_options
             for i, gait_loop_item in enumerate(gait_loop):
                 if feet_state == gait_loop_item["state"]:
                     rwd.gait_loop_options.append(deque(gait_loop[i:] + gait_loop[:i],
