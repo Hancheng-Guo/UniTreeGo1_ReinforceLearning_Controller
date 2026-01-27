@@ -3,6 +3,7 @@ import copy
 import numpy as np
 from gymnasium.spaces import Box
 from gymnasium.envs.mujoco.ant_v5 import AntEnv
+from gymnasium.envs.mujoco import MujocoEnv
 import src.env.mode_selection_env as mode_selection_env
 
 from stable_baselines3.ppo.ppo import PPO
@@ -26,6 +27,7 @@ class ModeConditionedLocomotionEnv(AntEnv):
         reset_noise_scale: float = 0.1,
         exclude_current_positions_from_observation: bool = False,
         include_cfrc_ext_in_observation: bool = True,
+        key_frame: str = "home",
 
         render_mode: str = None,
         plt_n_cols:  int = 4,
@@ -47,10 +49,11 @@ class ModeConditionedLocomotionEnv(AntEnv):
                          exclude_current_positions_from_observation=exclude_current_positions_from_observation,
                          width=width,
                          height=height)
-
+        self.key_frame = key_frame
         # for stage
         self.stage = 0. # update in callback
         # for reward
+        self.obs = None
         self.action = None
         self.action_old = None
         self._foot_ids = [mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_GEOM, foot)
@@ -77,9 +80,21 @@ class ModeConditionedLocomotionEnv(AntEnv):
 
     def reset(self, *, seed=None, options=None):
         self.controller.reset()
-        obs, info = super().reset(seed=seed, options=options)
-        self._dispatch("_on_episode_start")
-        return obs, info
+        super(MujocoEnv, self).reset(seed=seed)
+        if self.key_frame is not None:
+            key_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_KEY, "home")
+        if key_id >= 0:
+            mujoco.mj_resetDataKeyframe(self.model, self.data, key_id)
+        else:
+            mujoco.mj_resetData(self.model, self.data)
+
+        ob = self.reset_model()
+        # obs = self._decontruct_obs(ob)
+        info = self._get_reset_info()
+
+        if self.render_mode == "human":
+            self.render()
+        return ob, info
     
     def step(self, action):
         self.control_vector = self.controller.get()
@@ -88,6 +103,7 @@ class ModeConditionedLocomotionEnv(AntEnv):
         self.do_simulation(action, self.frame_skip)
 
         observation = self._get_obs()
+        self.obs = observation
         reward, reward_info, is_alive = self._get_rew()
         terminated = (not is_alive) and self._terminate_when_unhealthy
         info = {"stage": self.stage, "reward": reward, **reward_info}
@@ -108,6 +124,15 @@ class ModeConditionedLocomotionEnv(AntEnv):
         reward, reward_info = self.reward()
         is_alive = reward_info["is_alive"]
         return reward, reward_info, is_alive
+    
+    def reset_model(self):
+        noise_low = -self._reset_noise_scale
+        noise_high = self._reset_noise_scale
+        qpos = self.data.qpos + self.np_random.uniform(low=noise_low, high=noise_high, size=self.model.nq)
+        qvel = (self.data.qvel + self._reset_noise_scale * self.np_random.standard_normal(self.model.nv))
+        self.set_state(qpos, qvel) # mujoco.mj_forward(self.model, self.data)
+        observation = self._get_obs()
+        return observation
     
     def set_stage(self, stage):
         self.stage = stage
