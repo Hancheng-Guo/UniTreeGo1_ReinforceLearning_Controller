@@ -14,7 +14,7 @@ from src.runner.common.display_obs import get_qpos, get_qvel
 
 from stable_baselines3.common.env_util import make_vec_env
 from src.config.base import update_config, get_config
-from src.runner.common.modify_model_camera import modify_model_camera
+from src.runner.common.modify_model import modify_model
 
 class PPORunner:
     def __init__(self,
@@ -97,11 +97,12 @@ class PPORunner:
         kwargs["plt_x_range"] = self.config["demo"]["plt_x_range"]
         
         # Modify model camera if needed based on configuration
-        if not self.config["is"]["model_camera_modified"]:
-            modify_model_camera(dir_original=self.config["path"]["model_dir_original"],
-                                dir_modified=self.config["path"]["model_dir_modified"],
-                                camera_pos=self.config["demo"]["camera_pos"],
-                                camera_xyaxes=self.config["demo"]["camera_xyaxes"])
+        if not self.config["is"]["model_modified"]:
+            modify_model(dir_original=self.config["path"]["model_dir_original"],
+                         dir_modified=self.config["path"]["model_dir_modified"],
+                         camera_pos=self.config["demo"]["camera_pos"],
+                         camera_xyaxes=self.config["demo"]["camera_xyaxes"])
+            self.config["is"]["model_modified"] = True
 
         # Add control and reward configurations to environment
         kwargs["control_config"] = self.config["control"]
@@ -246,11 +247,17 @@ class PPOTrainer(PPORunner):
         except:
             # Default to idle stage if file doesn't exist or can't be loaded
             base_stage = 0.
+        max_stage = np.inf
+        for _, val in self.config["control"]["generator_schedule"].items():
+            max_stage = min(len(val["avg"]), max_stage)
+            max_stage = min(len(val["amp"]), max_stage)
+        max_stage = 1 if max_stage == np.inf else max_stage
         
         # Construct the callback keyword arguments dictionary
         self.callback_kwargs = {
             # for StageScheduleCallback
             "base_stage": base_stage,
+            "max_stage": max_stage,
             # for CustomTensorboardCallback
             "log_freq": self.config["train"]["custom_log_freq"],
             "tensorboard_items": self.config["tensorboard_items"],

@@ -4,7 +4,7 @@ train:
   reset_noise_scale: 0.1
   max_episode_steps: 1000
   total_iterations: 1000
-  checkpoint_freq_iterations: 10
+  checkpoint_freq_iterations: 50
   loco_iteration_steps: 8192
   mode_iteration_steps: 2048
   custom_loco_log_freq: 2048
@@ -24,6 +24,7 @@ control:
   control_type: "generate"
   generator_theta: 1.0
   generator_smooth_order: 8
+  generator_random: True
   generator_schedule:
     robot_x_velocity:
       clip: [-2.0, 10.0]
@@ -51,10 +52,10 @@ reward:
   hinge_angular_velocity_weight: -0.001
   hinge_position_weight: -1.0
   hinge_exceed_limit_weight: -5.0
-  hinge_energy_weight: -2.0e-5
-  gait_loop_weight: 1.0
-  foot_state_duration_weight: 1.0
-  foot_sliding_velocity_weight: -0.2
+  hinge_energy_weight: -0.001
+  gait_loop_weight: 5.0
+  foot_state_duration_weight: 0.5
+  foot_sliding_velocity_weight: -2.0
   foot_lift_height_weight: 1.0
 
   z_position_target: 0.3
@@ -107,7 +108,7 @@ path:
 
 is:
   param_shared: True
-  model_camera_modified: False
+  model_modified: False
   model_body_part_visiable: True
   model_obs_space_visiable: True
   model_action_space_visiable: True

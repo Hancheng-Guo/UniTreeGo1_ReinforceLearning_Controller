@@ -10,6 +10,7 @@ class CustomMujocoCallback(EnvBaseCallback):
         self.env = env
         self.camera_id = mujoco.mj_name2id(self.env.model, mujoco.mjtObj.mjOBJ_CAMERA, "tracking")
         self.env.mjc_img = None
+        # self._reset_tracking_camera()
         return True
 
     def _on_episode_start(self, **kwargs) -> bool:
