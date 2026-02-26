@@ -110,7 +110,7 @@
             <geom class="visual" mesh="calf" />
             <geom class="calf1" />
             <geom class="calf2" />
-            <geom name="FR" class="foot" />
+            <geom name="FR" class="foot" friction="1.8 0.1 0.001" />
             <site name="FR" pos="0 0 -0.213" type="sphere" size="0.023" group="5" />
           </body>
         </body>
@@ -134,7 +134,7 @@
             <geom class="visual" mesh="calf" />
             <geom class="calf1" />
             <geom class="calf2" />
-            <geom name="FL" class="foot" />
+            <geom name="FL" class="foot" friction="1.8 0.1 0.001" />
             <site name="FL" pos="0 0 -0.213" type="sphere" size="0.023" group="5" />
           </body>
         </body>
@@ -159,7 +159,7 @@
             <geom class="visual" mesh="calf" />
             <geom class="calf1" />
             <geom class="calf2" />
-            <geom name="RR" class="foot" />
+            <geom name="RR" class="foot" friction="1.8 0.1 0.001" />
             <site name="RR" pos="0 0 -0.213" type="sphere" size="0.023" group="5" />
           </body>
         </body>
@@ -184,7 +184,7 @@
             <geom class="visual" mesh="calf" />
             <geom class="calf1" />
             <geom class="calf2" />
-            <geom name="RL" class="foot" />
+            <geom name="RL" class="foot" friction="1.8 0.1 0.001" />
             <site name="RL" pos="0 0 -0.213" type="sphere" size="0.023" group="5" />
           </body>
         </body>
