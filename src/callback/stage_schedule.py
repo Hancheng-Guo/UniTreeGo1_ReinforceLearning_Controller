@@ -1,6 +1,8 @@
 import numpy as np
+import os
 from stable_baselines3.common.callbacks import BaseCallback
 from src.callback.common.iter_base_callback import IterBaseCallback
+from src.callback.common.test_base_callback import TestBaseCallback
 from collections import deque
 from enum import IntEnum
 from functools import partial
@@ -91,44 +93,39 @@ class StageScheduler:
 
 class FlatStage(IntEnum):
     idle = 0
-    trot_a = 1
-    trot_b = 2
-    trot_c = 3
-    canter_a = 4
-    canter_b = 5
-    gallop_a = 6
-    gallop_b = 7
-    done = 8
+    forward_slow = 1
+    forward_fast = 2
+    done = 3
 
 
 class FlatStageScheduleCallback(BaseCallback, StageScheduler):
     def __init__(self,
                  base_stage: float,
+                 max_stage: float = 1,
                  verbose: int = 0,
                  **kwargs):
         super().__init__(verbose)
         self.stage = base_stage
+        self.max_stage = max_stage
+        self.n_ep = 100
         self.winlen = None
 
         self.ep_lengths = None
         self.ep_lengths_fun = SmoothStep(
-            {0.0:   FlatStage.idle,
-             500.0: FlatStage.trot_a,
-             800.0: FlatStage.done})
+            {0.0:   0,
+             700.0: 1,
+             800.0: self.max_stage})
         
         self.robot_x_velocity = None
         self.robot_y_velocity = None
         self.z_angular_velocity = None
         self.robot_x_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
         self.robot_y_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
-        self.z_angular_velocity_fun = SmoothStep({0.0: 0, 0.75: 1})
+        self.z_angular_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
 
     def _on_training_start(self, **kwargs) -> bool:
         self.winlen = self.model.n_steps * self.model.n_envs
-        self.ep_lengths = deque([], maxlen=100)
-        self.robot_x_velocity = deque([], maxlen=self.winlen)
-        self.robot_y_velocity = deque([], maxlen=self.winlen)
-        self.z_angular_velocity = deque([], maxlen=self.winlen)
+        self._deque_reset()
         return True
     
     def _on_rollout_start(self, **kwargs) -> bool:
@@ -137,14 +134,25 @@ class FlatStageScheduleCallback(BaseCallback, StageScheduler):
         return True
     
     def _on_step(self, **kwargs) -> bool:
+        
         for info in self.locals.get("infos", []):
             if "episode" in info:
                 self.ep_lengths.append(info["episode"]["l"])
+
         for env in self.model.env.venv.envs:
             reward_info = env.env.env.env.env.reward.reward_info
-            self.robot_x_velocity.append(reward_info["robot_x_velocity_l2_exp"])
-            self.robot_y_velocity.append(reward_info["robot_y_velocity_l2_exp"])
-            self.z_angular_velocity.append(reward_info["z_angular_velocity_l2_exp"])
+
+            if (("robot_x_velocity_rbf_logcosh" in reward_info) and
+                ("robot_y_velocity_rbf_logcosh" in reward_info) and
+                ("z_angular_velocity_rbf_logcosh" in reward_info)):
+                    self.robot_x_velocity.append(reward_info["robot_x_velocity_rbf_logcosh"])
+                    self.robot_y_velocity.append(reward_info["robot_y_velocity_rbf_logcosh"])
+                    self.z_angular_velocity.append(reward_info["z_angular_velocity_rbf_logcosh"])
+            else:
+                self.robot_x_velocity.append(reward_info["robot_x_velocity_l2_exp"])
+                self.robot_y_velocity.append(reward_info["robot_y_velocity_l2_exp"])
+                self.z_angular_velocity.append(reward_info["z_angular_velocity_l2_exp"])
+
         return True
     
     def _on_rollout_end(self, **kwargs) -> bool:
@@ -159,11 +167,15 @@ class FlatStageScheduleCallback(BaseCallback, StageScheduler):
         
         stage_ep_lengths = self.ep_lengths_fun(np.mean(self.ep_lengths))
 
-        self.stage = max(min(stage_ep_lengths,
+        target_stage = max(min(stage_ep_lengths,
                              stage_robot_x_velocity,
                              stage_robot_y_velocity,
                              stage_z_angular_velocity),
                          self.stage)
+        target_stage = min(target_stage, self.max_stage - 0.001)
+        if int(target_stage) != int(self.stage):
+            self._deque_reset()
+        self.stage = target_stage
         
         info = {
             "stage": self.stage,
@@ -174,6 +186,13 @@ class FlatStageScheduleCallback(BaseCallback, StageScheduler):
         }
         self.print_info(info)
         return True
+    
+    def _deque_reset(self):
+        self.ep_lengths = deque(np.zeros(self.n_ep), maxlen=self.n_ep)
+        self.robot_x_velocity = deque(np.zeros(self.winlen * self.n_ep), maxlen=self.winlen * self.n_ep)
+        self.robot_y_velocity = deque(np.zeros(self.winlen * self.n_ep), maxlen=self.winlen * self.n_ep)
+        self.z_angular_velocity = deque(np.zeros(self.winlen * self.n_ep), maxlen=self.winlen * self.n_ep)
+
 
 
 class HierarchicalStage(IntEnum):
@@ -218,6 +237,7 @@ class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
                  loco_iteration_rollouts: int,
                  mode_iteration_rollouts: int,
                  winlen_iterations: int = 20,
+                 max_stage: float = 1,
                  verbose: int = 0,
                  **kwargs):
         super().__init__(verbose)
@@ -228,6 +248,7 @@ class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
         self.mode_iteration_rollouts = mode_iteration_rollouts
         self.winlen = None
         self.winlen_iterations = winlen_iterations
+        self.max_stage = max_stage
 
         self.ep_lengths = None
         self.ep_lengths_fun = SmoothStep({0.0: 0, 750.0: 1})
@@ -305,11 +326,18 @@ class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
         stage_ep_lengths = (int(self.stage) + 
             self.ep_lengths_fun(np.mean(self.ep_lengths)))
 
-        self.stage = max(min(stage_ep_lengths,
+        target_stage = max(min(stage_ep_lengths,
                              stage_robot_x_velocity,
                              stage_robot_y_velocity,
                              stage_z_angular_velocity),
                          self.stage)
+        target_stage = min(target_stage, self.max_stage - 0.001)
+        if int(target_stage) != int(self.stage):
+            self.ep_lengths = deque(np.zeros(self.winlen_iterations), maxlen=self.winlen_iterations)
+            self.robot_x_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
+            self.robot_y_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
+            self.z_angular_velocity = deque(np.zeros(self.winlen), maxlen=self.winlen)
+        self.stage = target_stage
         
         info = {
             "stage": self.stage,
@@ -319,4 +347,28 @@ class HierarchicalStageScheduleCallback(IterBaseCallback, StageScheduler):
             "stage_z_angular_velocity": stage_z_angular_velocity,
         }
         self.print_info(info)
+        return True
+    
+
+class TestHierarchicalStageCallback(TestBaseCallback):
+    def __init__(self, ppo_tester, **kwargs):
+        self.ppo_tester = ppo_tester
+        self.base_stage = np.load(os.path.join(self.ppo_tester.base_dir, f"cst_{self.ppo_tester.base_name}.npy"))
+        self.mode_model_for_loco = self.ppo_tester.model.env.venv.envs[0].env.env.env.env.mode_model
+            # self.test_env.envs[0].env.env.env.env.stage = stage
+
+    def _on_test_start(self, **kwargs) -> bool:
+        self.ppo_tester.model.env.venv.envs[0].env.env.env.env.set_stage(self.base_stage)
+        if not isinstance(self.mode_model_for_loco, DummyModeModel) and self.base_stage < 2:
+            self.mode_model_for_loco = DummyModeModel(self.mode_model_for_loco)
+            self.ppo_tester.model.env.venv.envs[0].env.env.env.env.mode_model = self.mode_model_for_loco
+        return True
+    
+    def _on_test_step(self, **kwargs) -> bool:
+        return True
+    
+    def _on_test_end(self, **kwargs) -> bool:
+        if isinstance(self.mode_model_for_loco, DummyModeModel):
+            self.mode_model_for_loco = self.mode_model_for_loco._mode_model
+            self.ppo_tester.model.env.venv.envs[0].env.env.env.env.mode_model = self.mode_model_for_loco
         return True

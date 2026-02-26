@@ -10,6 +10,7 @@ from src.callback.base import AdaptiveLRCallback
 from src.callback.base import TestProgressCallback, IterProgressCallback
 from src.callback.base import CustomTensorboardCallback
 from src.callback.base import RenderSaverCallback
+from src.callback.base import TestHierarchicalStageCallback
 from src.config.base import update_config, get_config
 from stable_baselines3.common.env_util import make_vec_env
 from src.runner.common.ppo_runner import PPOTrainer, PPOTester
@@ -327,7 +328,12 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
         if self.base_name:
             self.make_test_env("FlatLocomotionEnv") # Create vectorized environment for testing
             self.load_model_with_test_env()         # Load pre-trained model and environment
-            self.register_callbacks([TestProgressCallback(n_tests, max_steps),
+            
+            # stage = np.load(os.path.join(self.base_dir, f"cst_{self.base_name}.npy"))
+            # self.test_env.envs[0].env.env.env.env.stage = stage
+
+            self.register_callbacks([TestHierarchicalStageCallback(self),
+                                     TestProgressCallback(n_tests, max_steps),
                                      RenderSaverCallback(self)])
 
             for i in range(n_tests):
