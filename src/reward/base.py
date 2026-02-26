@@ -4,6 +4,7 @@ from src.reward.common.get_foot_state import are_foot_touching_ground, get_foot_
 from src.reward.alive import is_alive
 from src.reward.contact import illegal_contact_l1
 from src.reward.track import robot_xy_velocity_l2_exp, z_angular_velocity_l2_exp
+from src.reward.track import robot_xy_velocity_rbf_logcosh, z_angular_velocity_rbf_logcosh
 from src.reward.constraint import z_velocity_l2_xy_vel_weighted, z_position_l2_xy_vel_weighted, xy_angular_velocity_l2, xy_angular_gravity_projection
 from src.reward.constraint import z_velocity_l2, z_position_l2
 from src.reward.action import action_change_l2
@@ -30,6 +31,8 @@ __all__ = [
 
     "robot_xy_velocity_l2_exp",
     "z_angular_velocity_l2_exp",
+    "robot_xy_velocity_rbf_logcosh",
+    "z_angular_velocity_rbf_logcosh",
 
     "z_velocity_l2",
     "z_position_l2",
