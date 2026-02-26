@@ -3,8 +3,8 @@ train:
   frame_skip: 5
   reset_noise_scale: 0.1
   max_episode_steps: 1000
-  total_timesteps: 40960000
-  checkpoint_freq: 10240
+  total_timesteps: 10240000
+  checkpoint_freq: 102400
   custom_log_freq: 2048
 
 demo:
@@ -19,21 +19,23 @@ demo:
 
 control:
   control_type: "generate"
-  generator_theta: 1.0
-  generator_smooth_order: 8
-  generator_schedule: 
+  generator_theta: 0.2
+  generator_smooth_len: 15
+  generator_blend_len: 50
+  generator_random: False
+  generator_schedule:
     robot_x_velocity:
       clip: [0.0, 10.0]
-      avg:  [0.0, 2.0, 2.0, 1.5, 6.0, 3.0, 9.0, 5.0, 5.0]
-      amp:  [0.0, 0.0, 2.0, 2.5, 2.0, 5.0, 1.0, 7.0, 7.0]
+      avg:  [0.0, 2.0, 3.0, 2.0, 3.0]
+      amp:  [0.0, 0.0, 0.0, 2.0, 3.0]
     robot_y_velocity:
       clip: [-5, 5]
-      avg:  [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      amp:  [0.0, 0.0, 0.2, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+      avg:  [0.0, 0.0, 0.0, 0.0, 0.0]
+      amp:  [0.0, 0.0, 0.0, 0.0, 0.0]
     z_angular_velocity:
       clip: [-3.14, 3.14]
-      avg:  [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-      amp:  [0.0, 0.0, 0.5, 1.0, 1.0, 1.0, 1.5, 1.5, 1.5]
+      avg:  [0.0, 0.0, 0.0, 0.0, 0.0]
+      amp:  [0.0, 0.0, 0.0, 0.0, 0.0]
 
 reward:
   alive_weight: 0.2
@@ -49,12 +51,13 @@ reward:
   hinge_position_weight: -1.0
   hinge_exceed_limit_weight: -5.0
   hinge_energy_weight: -2.0e-5
-  gait_loop_weight: 1.0
+  gait_loop_weight: 2.5
   foot_state_duration_weight: 1.0
   foot_sliding_velocity_weight: -0.2
   foot_lift_height_weight: 1.0
 
-  z_position_target: 0.3
+  track_rbf_k: 0.25
+  z_position_target: 0.27
   hinge_position_std: 0.2
   hinge_exceed_limit_ratio: 0.95
   gait_loop_k: 0.25
@@ -83,7 +86,7 @@ path:
   output: ".\\output\\"
   model_dir_original: ".\\assets\\mujoco_menagerie\\unitree_go1\\"
   model_dir_modified: ".\\assets\\model\\"
-  env_py: ".\\src\\env\\flat_locomotion_env.py"
+  env_py: ".\\src\\env\\fast_flat_locomotion_env.py"
   checkpoint_tree: ".\\output\\checkpoint_tree"
 
 is:
@@ -97,10 +100,10 @@ tensorboard_items:
   stage: 0
   alive_reward: 0
   illegal_contact_penalty: 0
+  robot_x_velocity: 0
+  robot_y_velocity: 0
   robot_xy_velocity_reward: 0
-  robot_x_velocity_l2_exp: 0
-  robot_y_velocity_l2_exp: 0
-  z_angular_velocity_l2_exp: 0
+  z_angular_velocity: 0
   z_angular_velocity_reward: 0
   z_velocity_penalty: 0
   z_position_penalty: 0
