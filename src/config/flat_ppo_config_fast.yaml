@@ -88,7 +88,7 @@ path:
 
 is:
   param_shared: True
-  model_camera_modified: False
+  model_modified: False
   model_body_part_visiable: True
   model_obs_space_visiable: True
   model_action_space_visiable: True

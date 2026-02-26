@@ -2,7 +2,7 @@ from src.callback.custom_checkpoint import FlatCheckpointCallback, HierarchicalC
 from src.callback.adaptive_learning_rate import AdaptiveLRCallback
 from src.callback.progress_bar import TrainProgressCallback, TestProgressCallback, IterProgressCallback
 from src.callback.custom_tensorboard import CustomTensorboardCallback, ThreadTensorBoard
-from src.callback.stage_schedule import FlatStageScheduleCallback, HierarchicalStageScheduleCallback
+from src.callback.stage_schedule import FlatStageScheduleCallback, HierarchicalStageScheduleCallback, TestHierarchicalStageCallback
 
 from src.callback.custom_matplotlib import CustomMatPlotLibCallback
 from src.callback.custom_mujoco import CustomMujocoCallback
@@ -20,6 +20,7 @@ __all__ = [
     "ThreadTensorBoard",
     "FlatStageScheduleCallback",
     "HierarchicalStageScheduleCallback",
+    "TestHierarchicalStageCallback",
 
     "CustomMatPlotLibCallback",
     "CustomMujocoCallback",

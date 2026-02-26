@@ -10,12 +10,11 @@ def plt_select_kwargs(state, info):
         "x_vel": {"value": info.get("robot_x_velocity"), "needs_unwrap": False},
         "y_vel": {"value": info.get("robot_y_velocity"), "needs_unwrap": False},
         "z_angular_vel": {"value": info.get("z_angular_velocity"), "needs_unwrap": False},
+        "gait_loop": {"value": info.get("gait_loop_duration"), "needs_unwrap": False},
         "x_vel_tar": {"value": info.get("robot_x_velocity_target"), "needs_unwrap": False},
         "y_vel_tar": {"value": info.get("robot_y_velocity_target"), "needs_unwrap": False},
         "z_angular_vel_tar": {"value": info.get("z_angular_velocity_target"), "needs_unwrap": False},
-        "gait_loop_tanh": {"value": info.get("gait_loop_duration_tanh"), "needs_unwrap": False},
         "foot_state_exp": {"value": info.get("foot_state_duration_exp"), "needs_unwrap": False},
-        "hinge_energy": {"value": info.get("hinge_energy_l1"), "needs_unwrap": False},
         }
     return selected_kwargs
 
@@ -118,6 +117,9 @@ class CustomMatPlotLibCallback(EnvBaseCallback):
                 y_padding = (0.5 - (ax.dataLim.y1 - ax.dataLim.y0)) / 2
             else:
                 y_padding = 0
-            ax.set_ylim(ax.dataLim.y0 - y_padding, ax.dataLim.y1 + y_padding)
+            y_min = ax.dataLim.y0 - y_padding
+            y_max = ax.dataLim.y1 + y_padding
+            y_range = y_max - y_min
+            ax.set_ylim(y_min - 0.05 * y_range, y_max + 0.05 * y_range)
         except:
             pass

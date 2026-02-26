@@ -11,42 +11,50 @@ from src.callback.base import RenderSaverCallback
 
 from src.runner.common.ppo_runner import PPOTrainer, PPOTester
 
+runner_types = ["fast", "track"]
+config_names = {
+    "fast":  "./src/config/flat_ppo_config_fast.yaml",
+    "track": "./src/config/flat_ppo_config_track.yaml"
+}
+env_names = {
+    "fast":  "FastFlatLocomotionEnv",
+    "track": "TrackFlatLocomotionEnv"
+}
+
 class FlatPPORunner(PPOTrainer, PPOTester):
     def __init__(self,
-                 base_name: str = None):
-        with open("./src/config/flat_ppo_config.yaml", "r") as f:
+                 base_name: str = None,
+                 runner_type: str = "track"):
+        self.runner_type = runner_type
+        with open(config_names[self.runner_type], "r") as f:
            config = yaml.safe_load(f)
         super().__init__(config, base_name)
 
     def train(self,
               config_inheritance: bool = False,
               note_skip: bool = False,
-              tensorboard_skip : bool = False):
+              tensorboard_skip : bool = False,
+              callbacks : list = []):
         
         self.get_note(note_skip)    # Get training note information
         self.get_save_name()        # Get save name and directory
         self.run_tensorboard(tensorboard_skip)      # Start TensorBoard thread for logging
         self.inherite_config(config_inheritance)    # Inherit config
         self.get_algorithm_kwargs()                 # Prepare algorithm parameters
-        self.make_train_env("FlatLocomotionEnv")    # Create parallel training environment
+        self.make_train_env(env_names[self.runner_type])    # Create parallel training environment
         self.load_model_with_train_env(tensorboard_skip)    # Load model and environment
 
         self.get_callback_kwargs()  # Get callback function parameters
         self.get_training_kwargs()  # Get training parameters
         # Start model training process
-        self.model.learn(**self.training_kwargs,
-                         callback=[TrainProgressCallback(**self.callback_kwargs),
-                                   FlatStageScheduleCallback(**self.callback_kwargs),
-                                   CustomTensorboardCallback(**self.callback_kwargs),
-                                   AdaptiveLRCallback(**self.callback_kwargs),
-                                   FlatCheckpointCallback(**self.callback_kwargs)])
+        self.model.learn(**self.training_kwargs, callback=[callback(**self.callback_kwargs) for callback in callbacks])
         
         self.train_env_close()  # Clean up resources
 
     def test(self, n_tests=3, max_steps=1000):
         
         if self.base_name:
-            self.make_test_env("FlatLocomotionEnv") # Create vectorized environment for testing
+            self.make_test_env(env_names[self.runner_type]) # Create vectorized environment for testing
             self.load_model_with_test_env()         # Load pre-trained model and environment
             self.register_callbacks([TestProgressCallback(n_tests, max_steps),
                                      RenderSaverCallback(self)])
@@ -70,4 +78,28 @@ class FlatPPORunner(PPOTrainer, PPOTester):
                                                                            f"cst_{self.base_name}.npy"))
 
 
+class FastFlatPPORunner(FlatPPORunner):
+    def __init__(self, **kwargs):
+        super().__init__(runner_type="fast", **kwargs)
 
+    def train(self, **kwargs):
+        callbacks = [TrainProgressCallback,
+                     FlatStageScheduleCallback,
+                     CustomTensorboardCallback,
+                     AdaptiveLRCallback,
+                     FlatCheckpointCallback]
+        super().train(callbacks=callbacks, **kwargs)
+    
+
+
+class TrackFlatPPORunner(FlatPPORunner):
+    def __init__(self, **kwargs):
+        super().__init__(runner_type="track", **kwargs)
+
+    def train(self, **kwargs):
+        callbacks = [TrainProgressCallback,
+                     FlatStageScheduleCallback,
+                     CustomTensorboardCallback,
+                     AdaptiveLRCallback,
+                     FlatCheckpointCallback]
+        super().train(callbacks=callbacks, **kwargs)

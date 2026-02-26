@@ -2,6 +2,7 @@ import imageio
 import os
 import io
 import re
+import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 
@@ -51,26 +52,47 @@ class RenderSaver():
             plt_fig.canvas.print_png(buffer)
             buffer.write(buffer.getvalue())
             plt_img = Image.open(buffer)
-            self.plt_frames.append(plt_img)
+            self.plt_frames.append(plt_img.convert("RGB"))
 
             mjc_img = self.my_env.render("rgb_array")
-            self.mjc_frames.append(mjc_img)
+            self.mjc_frames.append(Image.fromarray(mjc_img))
         else:
-            self.mjc_frames.append(self.my_env.mjc_img)
-            self.plt_frames.append(self.my_env.plt_img)
+            self.mjc_frames.append(Image.fromarray(self.my_env.mjc_img))
+            self.plt_frames.append(self.my_env.plt_img.convert("RGB"))
 
     def save(self):
-        plt_path = os.path.join(self.save_dir,
-                                f"plt_{self.test_name}[{self.target_index}].gif")
-        imageio.mimsave(plt_path, self.plt_frames, fps=1/self.world_dt,
-                        loop=0, subrectangles=True, palettesize=4, optimize=True)
-        print(f"Saving matplot fig of demo to {plt_path}")
+        fps = 1/self.world_dt
 
-        mjc_path = os.path.join(self.save_dir,
-                                f"mjc_{self.test_name}[{self.target_index}].gif")
-        imageio.mimsave(mjc_path, self.mjc_frames, fps=1/self.world_dt,
-                        loop=0, subrectangles=True, palettesize=8, optimize=True)
-        print(f"Saving mujoco render of demo to {mjc_path}")
+        # plt_path = os.path.join(self.save_dir, f"plt_{self.test_name}[{self.target_index}].gif")
+        # imageio.mimsave(plt_path, self.plt_frames, fps=fps, loop=0, subrectangles=True, optimize=True)
+        # print(f"Saving matplot fig of demo to {plt_path}")
+
+        # mjc_path = os.path.join(self.save_dir, f"mjc_{self.test_name}[{self.target_index}].gif")
+        # imageio.mimsave(mjc_path, self.mjc_frames, fps=fps, loop=0, subrectangles=True, optimize=True)
+        # print(f"Saving mujoco render of demo to {mjc_path}")
+
+        com_frames = []
+        mjc_new_width = int(self.mjc_frames[0].width / self.mjc_frames[0].height * self.plt_frames[0].height)
+        mjc_new_height = self.plt_frames[0].height
+        for i in range(max(len(self.mjc_frames),len(self.plt_frames))):
+            mjc_frame = self.mjc_frames[i].resize((mjc_new_width, mjc_new_height), Image.LANCZOS)
+            plt_frame = self.plt_frames[i]
+            combined = np.hstack((np.array(mjc_frame), np.array(plt_frame)))
+            com_frames.append(Image.fromarray(np.array(combined)))
+        com_path = os.path.join(self.save_dir, f"{self.test_name}[{self.target_index}].mp4")
+        imageio.mimsave(com_path, com_frames, fps=fps, codec="libx264", quality=6, macro_block_size=None)
+        print(f"Saving render of demo to {com_path}")
+
+        # palette = com_frames[0].convert("L").quantize(colors=8).getpalette()
+        # pal_img = Image.new("P", (1, 1))
+        # pal_img.putpalette(palette)
+        # com_frames = [
+        #     fr.convert("L").quantize(palette=pal_img, dither=Image.Dither.NONE)
+        #     for fr in com_frames
+        # ]
+        # com_path = os.path.join(self.save_dir, f"{self.test_name}[{self.target_index}].gif")
+        # imageio.mimsave(com_path, com_frames, fps=fps, loop=0, subrectangles=True, optimize=True)
+        # print(f"Saving render of demo to {com_path}")
 
         self.target_index += 1
 
