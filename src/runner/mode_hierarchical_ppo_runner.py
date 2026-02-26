@@ -36,8 +36,7 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
         self.run_tensorboard(tensorboard_skip)      # Start TensorBoard thread for logging
         self.inherite_config(config_inheritance)    # Inherit config
         self.get_algorithm_kwargs()                 # Prepare algorithm parameters
-        self.make_loco_train_env("ModeConditionedLocomotionEnv")    # Create parallel locomotion training environment
-        self.make_mode_train_env("ModeSelectionEnv")        # Create parallel mode training environment
+        self.make_train_env()
         self.load_model_with_train_env(tensorboard_skip)    # Load model and environment
 
         self.get_callback_kwargs()  # Get callback function parameters
@@ -270,14 +269,19 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
             "init_lr": self.config["algorithm"]["mode"]["learning_rate"],
         }
 
-      
-    def make_loco_train_env(self, env_name):
-        self.make_train_env(env_name)
+    def make_train_env(self):
+        super().make_train_env("ModeConditionedLocomotionEnv")
         self.loco_train_env = self.train_env
-
-    def make_mode_train_env(self, env_name):
-        self.make_train_env(env_name)
+        super().make_train_env("ModeSelectionEnv")
         self.mode_train_env = self.train_env
+      
+    # def make_loco_train_env(self, env_name):
+    #     self.make_train_env(env_name)
+    #     self.loco_train_env = self.train_env
+
+    # def make_mode_train_env(self, env_name):
+    #     self.make_train_env(env_name)
+    #     self.mode_train_env = self.train_env
 
     def load_model_with_train_env(self,
                                   tensorboard_skip: bool = False,
@@ -323,10 +327,11 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
         self.base_name = self.save_name
         self.check_base_name()
 
+
     def test(self, n_tests=3, max_steps=1000):
         
         if self.base_name:
-            self.make_test_env("FlatLocomotionEnv") # Create vectorized environment for testing
+            self.make_test_env() # Create vectorized environment for testing
             self.load_model_with_test_env()         # Load pre-trained model and environment
             
             # stage = np.load(os.path.join(self.base_dir, f"cst_{self.base_name}.npy"))
@@ -334,7 +339,7 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
 
             self.register_callbacks([TestHierarchicalStageCallback(self),
                                      TestProgressCallback(n_tests, max_steps),
-                                     RenderSaverCallback(self)])
+                                     RenderSaverCallback(self),])
 
             for i in range(n_tests):
                 self._dispatch("_on_test_start")
@@ -348,11 +353,27 @@ class ModeHierarchicalPPORunner(PPOTrainer, PPOTester):
                 self._dispatch("_on_test_end")
                 
             self.test_env.close()   # Clean up resources
+
+    def make_test_env(self):
+        super().make_test_env("ModeSelectionEnv")
+        self.mode_test_env = self.test_env
+        super().make_test_env("ModeConditionedLocomotionEnv")
+        self.loco_test_env = self.test_env
     
     def load_model_with_test_env(self, **kwargs):
-        super().load_model_with_test_env(**kwargs)
-        self.test_env.envs[0].env.env.env.env.stage = np.load(os.path.join(self.base_dir,
-                                                                           f"cst_{self.base_name}.npy"))
+        algorithm_kwargs = get_config(config=self.config, field="algorithm", try_keys=["device"])
 
+        self.mode_model, self.mode_test_env = super().load_model(self.mode_test_env, algorithm_kwargs, interfix="mode", **kwargs)
+        self.mode_test_env.training = False
+        self.mode_test_env.norm_reward = False
+
+        self.loco_model, self.loco_test_env = super().load_model(self.loco_test_env, algorithm_kwargs, interfix="loco", **kwargs)
+        self.loco_test_env.training = False
+        self.loco_test_env.norm_reward = False
+        for env in self.loco_test_env.venv.envs:
+            env.env.env.env.env.mode_model = self.mode_model
+
+        self.test_env = self.loco_test_env
+        self.model = self.loco_model
 
 

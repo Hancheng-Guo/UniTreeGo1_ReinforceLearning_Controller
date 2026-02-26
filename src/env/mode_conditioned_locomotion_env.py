@@ -80,21 +80,22 @@ class ModeConditionedLocomotionEnv(AntEnv):
 
     def reset(self, *, seed=None, options=None):
         self.controller.reset()
+        # obs, info = super().reset(seed=seed)
         super(MujocoEnv, self).reset(seed=seed)
         if self.key_frame is not None:
-            key_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_KEY, "home")
+            key_id = mujoco.mj_name2id(self.model, mujoco.mjtObj.mjOBJ_KEY, self.key_frame)
         if key_id >= 0:
             mujoco.mj_resetDataKeyframe(self.model, self.data, key_id)
         else:
             mujoco.mj_resetData(self.model, self.data)
 
-        ob = self.reset_model()
-        # obs = self._decontruct_obs(ob)
+        obs = self.reset_model()
         info = self._get_reset_info()
 
         if self.render_mode == "human":
             self.render()
-        return ob, info
+        self._dispatch("_on_episode_start")
+        return obs, info
     
     def step(self, action):
         self.control_vector = self.controller.get()
