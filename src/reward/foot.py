@@ -32,7 +32,7 @@ def foot_sliding_velocity_l2(rwd):
             mujoco.mj_objectVelocity(rwd.env.model, rwd.env.data, mujoco.mjtObj.mjOBJ_GEOM,
                                      foot_id, vel, 0)
             foot_sliding_velocity[i] = np.sqrt(np.sum(np.square(vel[3:5])))
-    foot_sliding_velocity_l2 = np.mean(np.square(foot_sliding_velocity))
+    foot_sliding_velocity_l2 = np.sum(np.square(foot_sliding_velocity))
 
     info = {
         "foot_sliding_velocity": foot_sliding_velocity,
