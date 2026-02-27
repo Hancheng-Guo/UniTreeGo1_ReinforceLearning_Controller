@@ -20,7 +20,8 @@ This project implements a reinforcement learning controller for the [UniTree Go1
 ## Demo
 
 **↓↓ Click to watch the demo video ↓↓**
-[![Demo Video](assets\image\2026-02-23_23-24-17_100[1]_sample.png)](https://www.youtube.com/watch?v=7jw-A3Ukk1M)
+[Demo Video](assets\image\2026-02-23_23-24-17_100[1]_sample.png)]
+<!-- [![Demo Video](assets\image\2026-02-23_23-24-17_100[1]_sample.png)](https://www.youtube.com/watch?v=7jw-A3Ukk1M) -->
 
 <!-- 
 ## System Architecture
