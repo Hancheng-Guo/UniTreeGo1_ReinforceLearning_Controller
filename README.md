@@ -10,29 +10,30 @@ This project implements a reinforcement learning controller for the [UniTree Go1
 
 * **State Machine Gait Control**: Utilizing a state machine to guide the transition of robotic gaits, replacing traditional gait phase methods.
 
-* **Multiple Gait Options**: The agent will autonomously select a gait based on the control speed.
+* **Curriculum Learning**: Applying different commands and gait rewards at different stages ultimately achieves high-speed forward movement and successfully optimized model convergence.
 
-* **Curriculum Learning**: Applying differently distributed commands and gait rewards at different stages ultimately achieves smooth gait transitions and high-speed forward movement.
+* **Real-time Control Demonstration (Ongoing)**: Capture keyboard control commands and publish to ROS topics to achieve real-time control.
 
-* **Real-time Control Demonstration**: Capture keyboard control commands and publish to ROS topics to achieve real-time control.
+* **Multiple Gait Options (Ongoing)**: The agent will autonomously select a gait based on the control speed.
 
 
 ## Demo
 
-![demo](output/2025-12-21_22-43-26/demo_2025-12-21_22-43-26_20/mjc_2025-12-21_22-43-26_20%5B3%5D.gif)
+https://github.com/user-attachments/assets/a8ce94ef-8a5b-40d0-8d51-d135fd96ac88
 
 
+<!-- 
 ## System Architecture
 
 ### Overall Architecture Diagram
 
-<!-- Insight Agent Private Database Mining: AI agent for in-depth analysis of private public opinion databases
+Insight Agent Private Database Mining: AI agent for in-depth analysis of private public opinion databases
 
 Media Agent Multimodal Content Analysis: AI agent with powerful multimodal capabilities
 
 Query Agent Precise Information Search: AI agent with domestic and international web search capabilities
 
-Report Agent Intelligent Report Generation: Multi-round report generation AI agent with built-in templates -->
+Report Agent Intelligent Report Generation: Multi-round report generation AI agent with built-in templates
 
 ### Project Code Structure Tree
 
@@ -82,15 +83,15 @@ Report Agent Intelligent Report Generation: Multi-round report generation AI age
 
 ## Prerequisites
 
-<!-- Python 3.x
+Python 3.x
 Robot Operating System (ROS) - if applicable to your setup
 NumPy, PyTorch/TensorFlow for ML components
 UniTree Go1 SDK and drivers
-Appropriate hardware dependencies -->
+Appropriate hardware dependencies
 
 ## Quick Start
 
-<!-- Clone the repository:
+Clone the repository:
 
 bash
 git clone https://github.com/your-username/UniTreeGo1_ReinforceLearning_Controller.git
@@ -104,6 +105,7 @@ Ensure the UniTree Go1 robot is properly connected and calibrated
 Run the main controller script:
 bash
 python main_controller.py
-The reinforcement learning model will begin training/operating based on the configured parameters -->
+The reinforcement learning model will begin training/operating based on the configured parameters
 
 
+-->
