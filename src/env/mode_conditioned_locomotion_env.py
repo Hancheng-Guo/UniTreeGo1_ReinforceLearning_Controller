@@ -10,7 +10,7 @@ from stable_baselines3.ppo.ppo import PPO
 
 import src.reward.base as rwd
 from src.reward.base import NewReward
-from src.control.base import UniTreeGo1ControlGenerator, UniTreeGo1ControlUDP
+from src.control.base import UniTreeGo1ControlOUGenerator, UniTreeGo1ControlUDP
 from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
 
@@ -206,7 +206,7 @@ class UniTreeGo1Control:
         if control_config["control_type"] == "udp":
             self.controller = UniTreeGo1ControlUDP(self.env, **control_config)
         else:
-            self.controller = UniTreeGo1ControlGenerator(self.env, **control_config)
+            self.controller = UniTreeGo1ControlOUGenerator(self.env, **control_config)
     
     def __len__(self):
         return len(self.controller)

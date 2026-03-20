@@ -2,6 +2,7 @@
 .output
 __pycache__
 my_main.py
+test.py
 src/callback/__pycache__
 src/callback/common/__pycache__
 src/config/__pycache__

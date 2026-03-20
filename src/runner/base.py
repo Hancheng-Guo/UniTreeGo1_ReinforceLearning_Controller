@@ -16,7 +16,7 @@ from gymnasium.envs.registration import register
 register(id="FastFlatLocomotionEnv",
          entry_point="src.env.fast_flat_locomotion_env:FlatLocomotionEnv")
 register(id="TrackFlatLocomotionEnv",
-         entry_point="src.env.track_fast_flat_locomotion_env:FlatLocomotionEnv")
+         entry_point="src.env.track_flat_locomotion_env:FlatLocomotionEnv")
 register(id="ModeConditionedLocomotionEnv",
          entry_point="src.env.mode_conditioned_locomotion_env:ModeConditionedLocomotionEnv")
 register(id="ModeSelectionEnv",

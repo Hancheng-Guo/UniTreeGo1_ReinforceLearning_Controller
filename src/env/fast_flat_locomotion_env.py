@@ -1,4 +1,5 @@
 import mujoco
+import math
 import copy
 import numpy as np
 from gymnasium.spaces import Box
@@ -6,7 +7,7 @@ from gymnasium.envs.mujoco.ant_v5 import AntEnv
 from collections import deque
 import src.reward.base as rwd
 from src.reward.base import NewReward
-from src.control.base import UniTreeGo1ControlGenerator, UniTreeGo1ControlUDP
+from src.control.base import UniTreeGo1ControlOUGenerator, UniTreeGo1ControlUDP
 from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
 from src.reward.common.get_rotation_matrix import get_rotation_matrix

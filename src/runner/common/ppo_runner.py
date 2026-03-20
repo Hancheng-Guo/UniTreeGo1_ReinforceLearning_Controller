@@ -89,7 +89,6 @@ class PPORunner:
         kwargs["xml_file"] = self.config["path"]["model_dir_modified"] + "scene.xml"
         kwargs["frame_skip"] = self.config["train"]["frame_skip"]
         kwargs["reset_noise_scale"] = self.config["train"]["reset_noise_scale"]
-        kwargs["max_episode_steps"] = self.config["train"]["max_episode_steps"]
 
         # Configure demo visualization parameters
         kwargs["plt_n_cols"]  = self.config["demo"]["plt_n_cols"]
@@ -104,8 +103,7 @@ class PPORunner:
                          camera_xyaxes=self.config["demo"]["camera_xyaxes"])
             self.config["is"]["model_modified"] = True
 
-        # Add control and reward configurations to environment
-        kwargs["control_config"] = self.config["control"]
+        # Add reward configurations to environment
         kwargs["reward_config"] = self.config["reward"]
 
         return gym.make(*args, **kwargs)
@@ -142,7 +140,8 @@ class PPORunner:
             algorithm_kwargs.pop("learning_rate", None)
             model = PPO.load(base_model, env=env, **algorithm_kwargs, **kwargs)
         else:
-            env = VecNormalize(env, norm_obs=True, norm_reward=True)
+            # env = VecNormalize(env, norm_reward=False, norm_obs=True)
+            env = VecNormalize(env, norm_reward=False, norm_obs=False)
             model = PPO(env=env, **algorithm_kwargs, **kwargs)
         return model, env
     
@@ -248,7 +247,7 @@ class PPOTrainer(PPORunner):
             # Default to idle stage if file doesn't exist or can't be loaded
             base_stage = 0.
         max_stage = np.inf
-        for _, val in self.config["control"]["generator_schedule"].items():
+        for _, val in self.config["train"]["control"]["generator_schedule"].items():
             max_stage = min(len(val["avg"]), max_stage)
             max_stage = min(len(val["amp"]), max_stage)
         max_stage = 1 if max_stage == np.inf else max_stage
@@ -305,7 +304,11 @@ class PPOTrainer(PPORunner):
         - :self.train_env: Sets the training environment to a vectorized 
                            environment with n_envs parallel environments
         """
-        self.train_env = make_vec_env(lambda: self.make_gym_env(env_name),
+        train_kwargs = {
+            "control_config": self.config["train"]["control"],
+            "max_episode_steps": self.config["train"]["max_episode_steps"]
+        }
+        self.train_env = make_vec_env(lambda: self.make_gym_env(env_name, **train_kwargs),
                                       n_envs=self.config["train"]["n_envs"])
         
     def load_model_with_train_env(self,
@@ -421,6 +424,8 @@ class PPOTester(PPORunner):
             "render_mode": self.config["demo"]["demo_type"],
             "width": self.config["demo"]["mjc_render_width"],
             "height": self.config["demo"]["mjc_render_height"],
+            "control_config": self.config["demo"]["control"],
+            "max_episode_steps": self.config["demo"]["max_episode_steps"]
         }
         self.test_env = make_vec_env(lambda: self.make_gym_env(env_name, **test_kwargs), n_envs=1)
 

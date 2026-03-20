@@ -9,6 +9,8 @@ from src.callback.base import CustomTensorboardCallback
 from src.callback.base import FlatStageScheduleCallback
 from src.callback.base import RenderSaverCallback
 
+from src.control.base import UniTreeGo1ControlConstGenerator
+
 from src.runner.common.ppo_runner import PPOTrainer, PPOTester
 
 runner_types = ["fast", "track"]
@@ -51,26 +53,43 @@ class FlatPPORunner(PPOTrainer, PPOTester):
         
         self.train_env_close()  # Clean up resources
 
-    def test(self, n_tests=3, max_steps=1000):
+    def test(self, n_tests=3, max_steps=None, const_command=None):
         
         if self.base_name:
+            if max_steps is None: max_steps = self.config['demo']['max_episode_steps']
             self.make_test_env(env_names[self.runner_type]) # Create vectorized environment for testing
             self.load_model_with_test_env()         # Load pre-trained model and environment
             self.register_callbacks([TestProgressCallback(n_tests, max_steps),
                                      RenderSaverCallback(self)])
 
+            if const_command is not None:
+                for env in self.test_env.venv.envs:
+                    controllor = UniTreeGo1ControlConstGenerator(env.env.env.env.env,
+                                                                 const_command=const_command)
+                    env.env.env.env.env.controller.controller = controllor
+
+            infos = []
+            rewards = []
             for i in range(n_tests):
+                info_list = []
+                reward_list = []
                 self._dispatch("_on_test_start")
                 obs = self.test_env.reset()
                 for j in range(max_steps):
                     action, _ = self.model.predict(obs, deterministic=True)
                     obs, reward, done, info = self.test_env.step(action)
+                    info_list.append(info)
+                    reward_list.append(reward)
                     if done:
                         break
                     self._dispatch("_on_test_step")
                 self._dispatch("_on_test_end")
+                infos.append(info_list)
+                rewards.append(reward_list)
                 
             self.test_env.close()   # Clean up resources
+
+            return infos, rewards
     
     def load_model_with_test_env(self, **kwargs):
         super().load_model_with_test_env(**kwargs)

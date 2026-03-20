@@ -6,7 +6,7 @@ from gymnasium.envs.mujoco.ant_v5 import AntEnv
 
 import src.reward.base as rwd
 from src.reward.base import NewReward
-from src.control.base import UniTreeGo1ControlGenerator, UniTreeGo1ControlUDP
+from src.env.common.control import UniTreeGo1Control
 from src.callback.base import CustomMatPlotLibCallback, CustomMujocoCallback
 
 
