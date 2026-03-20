@@ -1,11 +1,9 @@
 from src.reward.common.new_reward import NewReward
 from src.reward.common.get_hinge_soft_limit import get_hinge_soft_lower_limit, get_hinge_soft_upper_limit
-from src.reward.common.get_foot_state import are_foot_touching_ground, get_foot_state
 from src.reward.alive import is_alive, is_fatal
 from src.reward.contact import illegal_contact_l1
 from src.reward.track import robot_xy_velocity_l2_exp, z_angular_velocity_l2_exp
 from src.reward.track import robot_xy_velocity_rbf_logcosh, z_angular_velocity_rbf_logcosh
-# from src.reward.track import xy_velocity_error_abs_diff_clip, z_angular_velocity_error_abs_diff_clip
 from src.reward.track import xy_velocity_error_integral_l2, z_angular_velocity_error_integral_l2
 from src.reward.constraint import z_velocity_l2_xy_vel_weighted, z_position_l2_xy_vel_weighted, xy_angular_velocity_l2, xy_angular_gravity_projection
 from src.reward.constraint import z_velocity_l2, z_position_l2
@@ -37,8 +35,6 @@ __all__ = [
     "z_angular_velocity_l2_exp",
     "robot_xy_velocity_rbf_logcosh",
     "z_angular_velocity_rbf_logcosh",
-    # "xy_velocity_error_abs_diff_clip",
-    # "z_angular_velocity_error_abs_diff_clip",
     "xy_velocity_error_integral_l2",
     "z_angular_velocity_error_integral_l2",
 

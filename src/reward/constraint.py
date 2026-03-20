@@ -1,5 +1,4 @@
 import numpy as np
-from src.reward.common.get_rotation_matrix import get_rotation_matrix
 
 
 def z_velocity_l2(rwd):
