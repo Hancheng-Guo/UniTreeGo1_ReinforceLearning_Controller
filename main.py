@@ -7,22 +7,17 @@ import warnings
 warnings.filterwarnings("ignore", category=GLFWError)
 warnings.filterwarnings("ignore", category=FutureWarning, module="keras")
 
-from src.runner.base import ppo_train, ppo_test
+from src.runner.base import FastFlatPPORunner, TrackFlatPPORunner, ModeHierarchicalPPORunner
 
 
 if __name__ == "__main__":
 
-
-    ### Test Existing Model.
-    # model_name = "2025-12-08_05-18-09_6"
-    # model_name = ppo_test(test_name=model_name, n_tests=1)
-
-
-    ### Train A New Model without Test.
-    model_name = ppo_train(base_model_name=None)
-
-
-    ### Continue Training Specified Model with Test.
-    # model_name = "2025-11-25_22-33-36" # your model name
-    # model_name = ppo_train(base_name=model_name, config_inheritance=False)
-    # model_name = ppo_test(test_name=model_name)
+    ### Train A New Flat PPO model for rapid forward.
+    flat_ppo = FastFlatPPORunner(base_name=None)
+    flat_ppo.train()
+    flat_ppo.test(n_tests=3)
+    
+    ### Train A Existed Flat PPO model for rapid forward.
+    # flat_ppo = FastFlatPPORunner(base_name="2025-12-08_05-18-09_6")
+    # flat_ppo.train(config_inheritance=False, note_skip=True)
+    # flat_ppo.test(n_tests=3)

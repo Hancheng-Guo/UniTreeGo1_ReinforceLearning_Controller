@@ -4,7 +4,7 @@ train:
   reset_noise_scale: 0.1
   max_episode_steps: 1000
   total_timesteps: 10240000
-  checkpoint_freq: 102400
+  checkpoint_freq: 512000
   custom_log_freq: 2048
 
 demo:
