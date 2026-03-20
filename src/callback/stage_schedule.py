@@ -113,15 +113,15 @@ class FlatStageScheduleCallback(BaseCallback, StageScheduler):
         self.ep_lengths = None
         self.ep_lengths_fun = SmoothStep(
             {0.0:   0,
-             700.0: 1,
-             800.0: self.max_stage})
+             500.0: 1,
+             700.0: self.max_stage})
         
         self.robot_x_velocity = None
         self.robot_y_velocity = None
         self.z_angular_velocity = None
-        self.robot_x_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
-        self.robot_y_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
-        self.z_angular_velocity_fun = SmoothStep({0.0: 0, 0.9: 1})
+        self.robot_x_velocity_fun = SmoothStep({0.0: 0, 0.75: 1})
+        self.robot_y_velocity_fun = SmoothStep({0.0: 0, 0.75: 1})
+        self.z_angular_velocity_fun = SmoothStep({0.0: 0, 0.75: 1})
 
     def _on_training_start(self, **kwargs) -> bool:
         self.winlen = self.model.n_steps * self.model.n_envs

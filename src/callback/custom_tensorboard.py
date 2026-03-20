@@ -72,7 +72,8 @@ class CustomTensorboardCallback(BaseCallback):
         infos = self.locals["infos"]
         for env_id in range(self.model.n_envs):
             for key, _ in self.tensorboard_items.items():
-                self.data[env_id][key] += infos[env_id][key]
+                if key in infos[env_id]:
+                    self.data[env_id][key] += infos[env_id][key]
 
         timesteps_past = self.num_timesteps - self.rollout_index
         if (timesteps_past % self.log_freq == 0) and (timesteps_past != 0):

@@ -14,7 +14,7 @@ def plt_select_kwargs(state, info):
         "x_vel_tar": {"value": info.get("robot_x_velocity_target"), "needs_unwrap": False},
         "y_vel_tar": {"value": info.get("robot_y_velocity_target"), "needs_unwrap": False},
         "z_angular_vel_tar": {"value": info.get("z_angular_velocity_target"), "needs_unwrap": False},
-        "foot_state_exp": {"value": info.get("foot_state_duration_exp"), "needs_unwrap": False},
+        "foot_state_exp": {"value": info.get("foot_state_duration_exp3"), "needs_unwrap": False},
         }
     return selected_kwargs
 

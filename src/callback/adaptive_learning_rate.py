@@ -1,4 +1,6 @@
 from stable_baselines3.common.callbacks import BaseCallback
+from collections import deque
+import numpy as np
 
 
 class AdaptiveLRCallback(BaseCallback):
@@ -25,6 +27,8 @@ class AdaptiveLRCallback(BaseCallback):
         self.current_lr = None
         self.smooth_step_len = smooth_step_len
         self.smooth_step_left = 0
+        # self.memory_len = 20
+        # self.kl_memory = deque(maxlen=self.memory_len)
 
     def _on_training_start(self, **kwargs) -> bool:
         current_lr = self.model.lr_schedule(self.model._current_progress_remaining)
@@ -53,12 +57,17 @@ class AdaptiveLRCallback(BaseCallback):
     def _on_rollout_end(self, **kwargs) -> bool:
         kl = self.logger.name_to_value.get(f"{self.prefix}/approx_kl")
         if kl is not None:
+            # self.kl_memory.append(kl)
             current_lr = self.model.lr_schedule(self.model._current_progress_remaining)
             if current_lr == self.target_lr:
                 if kl < self.kl_min:
+                # if sum(np.array(self.kl_memory) < self.kl_min) > (self.memory_len / 2):
                     self.target_lr = min(current_lr * self.factor, self.lr_max)
                     self.smooth_step_left = self.smooth_step_len
+                    # self.kl_memory.clear()
                 elif kl > self.kl_max:
+                # elif sum(np.array(self.kl_memory) > self.kl_max) > (self.memory_len / 2):
                     self.target_lr = max(current_lr / self.factor, self.lr_min)
                     self.smooth_step_left = self.smooth_step_len
+                    # self.kl_memory.clear()
         return True
