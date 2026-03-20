@@ -146,8 +146,8 @@ class FlatLocomotionEnv(AntEnv):
 
     def _get_feet_obs(self):
         for i, is_touching in enumerate(rwd.are_foot_touching_ground(self)):
-            self._feet_airborne_time[i] = 0 if is_touching else self._feet_airborne_time[i] + 1
-            self._feet_landed_time[i] = self._feet_landed_time[i] + 1 if is_touching else 0
+            self._feet_airborne_time[i] = 0. if is_touching else self._feet_airborne_time[i] + self.dt
+            self._feet_landed_time[i] = self._feet_landed_time[i] + self.dt if is_touching else 0.
         return np.concatenate((self._feet_landed_time.flatten(), self._feet_airborne_time.flatten()))
     
     def _get_veldiff_obs(self):
@@ -171,7 +171,7 @@ class UniTreeGo1Control:
         if control_config["control_type"] == "udp":
             self.controller = UniTreeGo1ControlUDP(self.env, **control_config)
         else:
-            self.controller = UniTreeGo1ControlGenerator(self.env, **control_config)
+            self.controller = UniTreeGo1ControlOUGenerator(self.env, **control_config)
     
     def __len__(self):
         return len(self.controller)
@@ -210,6 +210,7 @@ class UniTreeGo1Reward:
             robot_xy_velocity_weight,
             z_angular_velocity_weight,
             track_rbf_k,
+            track_smooth_time,
             z_velocity_weight,
             z_position_weight,
             z_position_target,
@@ -225,7 +226,7 @@ class UniTreeGo1Reward:
             gait_loop_weight,
             gait_loop_k,
             foot_state_duration_weight,
-            foot_state_k,
+            foot_state_sigma,
             foot_sliding_velocity_weight,
             foot_lift_height_weight,
             foot_lift_height_target,
@@ -235,9 +236,12 @@ class UniTreeGo1Reward:
             "alive":                    NewReward(self.env, rwd.is_alive, alive_weight),
             "illegal_contact":          NewReward(self.env, rwd.illegal_contact_l1, illegal_contact_weight),
             "robot_xy_velocity":        NewReward(self.env, rwd.robot_xy_velocity_rbf_logcosh, robot_xy_velocity_weight,
-                                                  rbf_k=track_rbf_k),
+                                                  rbf_k=track_rbf_k,
+                                                  robot_x_velocity=deque(maxlen=math.ceil(track_smooth_time/self.env.dt)),
+                                                  robot_y_velocity=deque(maxlen=math.ceil(track_smooth_time/self.env.dt))),
             "z_angular_velocity":       NewReward(self.env, rwd.z_angular_velocity_rbf_logcosh, z_angular_velocity_weight,
-                                                  rbf_k=track_rbf_k),
+                                                  rbf_k=track_rbf_k,
+                                                  z_angular_velocity=deque(maxlen=math.ceil(track_smooth_time/self.env.dt))),
             "z_velocity":               NewReward(self.env, rwd.z_velocity_l2_xy_vel_weighted, z_velocity_weight,),
             "z_position":               NewReward(self.env, rwd.z_position_l2_xy_vel_weighted, z_position_weight,
                                                   z_position_target=z_position_target),
@@ -255,7 +259,7 @@ class UniTreeGo1Reward:
             "gait_loop":                NewReward(self.env, rwd.trot_loop_duration_tanh, gait_loop_weight,
                                                   gait_loop_k=gait_loop_k, gait_type=None, gait_loop_options=[], gait_loop_duration=0),
             "foot_state_duration":      NewReward(self.env, rwd.foot_state_duration_exp, foot_state_duration_weight,
-                                                  foot_state_k=foot_state_k, foot_state_old=None, foot_state_duration=0),
+                                                  foot_state_sigma=foot_state_sigma, foot_state_old=None, foot_state_duration=0),
             "foot_sliding_velocity":    NewReward(self.env, rwd.foot_sliding_velocity_l2, foot_sliding_velocity_weight),
             "foot_lift_height":         NewReward(self.env, rwd.foot_lift_height_l2_exp_xy_vel_weighted, foot_lift_height_weight,
                                                   foot_lift_height_target=foot_lift_height_target),

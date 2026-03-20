@@ -76,11 +76,12 @@ reward:
   foot_lift_height_weight: 1.0
 
   track_rbf_k: 0.25
+  track_smooth_time: 0.15
   z_position_target: 0.27
   hinge_position_std: 0.2
   hinge_exceed_limit_ratio: 0.95
-  gait_loop_k: 0.25
-  foot_state_k: 0.05
+  gait_loop_k: 25.0
+  foot_state_sigma: 0.25
   foot_lift_height_target: 0.1
 
 algorithm:
