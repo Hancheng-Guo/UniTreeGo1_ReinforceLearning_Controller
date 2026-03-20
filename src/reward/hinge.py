@@ -2,7 +2,7 @@ import numpy as np
 
 
 def hinge_angular_velocity_l2(rwd):
-    hinge_angular_velocity = rwd.env.state_vector()[25:37]
+    hinge_angular_velocity = rwd.env.data.qvel[-12:]
     hinge_angular_velocity_l2 = np.mean(np.square(hinge_angular_velocity))
 
     info = {
@@ -12,9 +12,7 @@ def hinge_angular_velocity_l2(rwd):
 
 
 def hinge_position_l2(rwd):
-    hinge_position = rwd.env.state_vector()[7:19]
-    hinge_position_l2 = np.mean(np.square(
-        (hinge_position - rwd.hinge_position0) / rwd.hinge_position_std))
+    hinge_position_l2 = np.sum(np.square(rwd.env.envdata.joint_diff))
 
     info = {
         "hinge_position_l2": hinge_position_l2
@@ -37,8 +35,8 @@ def hinge_exceed_limit_l1(rwd):
 
 
 def hinge_energy_l1(rwd):
-    hinge_force = rwd.env.data.qfrc_actuator[6:19]
-    hinge_angular_velocity = rwd.env.state_vector()[25:37]
+    hinge_force = rwd.env.data.qfrc_actuator[-12:]
+    hinge_angular_velocity = rwd.env.data.qvel[-12:]
     hinge_energy_l1 = np.sum(np.abs(hinge_force * hinge_angular_velocity))
     
     info = {

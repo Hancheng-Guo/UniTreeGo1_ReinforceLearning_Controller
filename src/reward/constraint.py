@@ -3,7 +3,7 @@ from src.reward.common.get_rotation_matrix import get_rotation_matrix
 
 
 def z_velocity_l2(rwd):
-    z_velocity = rwd.env.state_vector()[21]
+    z_velocity = rwd.env.data.qvel[2]
     z_velocity_l2 = np.square(z_velocity)
 
     info = {
@@ -14,9 +14,9 @@ def z_velocity_l2(rwd):
 
 
 def z_velocity_l2_xy_vel_weighted(rwd):
-    z_velocity = rwd.env.state_vector()[21]
+    z_velocity = rwd.env.data.qvel[2]
     z_velocity_l2 = np.square(z_velocity)
-    xy_velocity = np.linalg.norm(rwd.env.state_vector()[19:21])
+    xy_velocity = np.linalg.norm(rwd.env.data.qvel[:2])
     z_velocity_l2_xy_vel_weighted = z_velocity_l2 / max(0.5, xy_velocity)
 
     info = {
@@ -28,7 +28,7 @@ def z_velocity_l2_xy_vel_weighted(rwd):
 
 
 def z_position_l2(rwd):
-    z_position = rwd.env.data.body(rwd.env._main_body).xpos[2]
+    z_position = rwd.env.data.qpos[2]
     z_position_l2 = np.square(z_position - rwd.z_position_target)
 
     info = {
@@ -39,9 +39,9 @@ def z_position_l2(rwd):
 
 
 def z_position_l2_xy_vel_weighted(rwd):
-    z_position = rwd.env.data.body(rwd.env._main_body).xpos[2]
+    z_position = rwd.env.data.qpos[2]
     z_position_l2 = np.square(z_position - rwd.z_position_target)
-    xy_velocity = np.linalg.norm(rwd.env.state_vector()[19:21])
+    xy_velocity = np.linalg.norm(rwd.env.data.qvel[:2])
     z_position_l2_xy_vel_weighted = z_position_l2 / max(0.5, xy_velocity)
 
     info = {
@@ -53,8 +53,8 @@ def z_position_l2_xy_vel_weighted(rwd):
 
 
 def xy_angular_velocity_l2(rwd):
-    x_angular_velocity = rwd.env.state_vector()[22]
-    y_angular_velocity = rwd.env.state_vector()[23]
+    x_angular_velocity = rwd.env.data.qvel[3]
+    y_angular_velocity = rwd.env.data.qvel[4]
     xy_angular_velocity_l2 = np.mean(np.square([x_angular_velocity, y_angular_velocity]))
 
     info = {
@@ -66,16 +66,9 @@ def xy_angular_velocity_l2(rwd):
 
 
 def xy_angular_gravity_projection(rwd):
-    R_rotate = get_rotation_matrix(rwd.env.state_vector()[3:7])
-    z_unit_vector = R_rotate[:,2]
-    g_vector = rwd.env.model.opt.gravity
-    g_z = np.dot(z_unit_vector, g_vector)
-    g_xoy = np.sqrt(max(np.sum(np.square(g_vector)) - np.square(g_z), 0.))
-    g_xoy_norm = g_xoy / np.linalg.norm(g_vector)
+    gravity_projection = rwd.env.envdata.gravity_projection
     
     info = {
-        "g_z": g_z,
-        "g_xoy": g_xoy,
-        "g_xoy_norm": g_xoy_norm
+        "gravity_projection": gravity_projection,
     }
-    return g_xoy_norm, info
+    return gravity_projection, info

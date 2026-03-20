@@ -82,8 +82,10 @@ class PPORunner:
         # Set basic environment parameters
         kwargs["id"] = env_name
         kwargs["main_body"] = "trunk"
-        kwargs["include_cfrc_ext_in_observation"] = True
-        kwargs["exclude_current_positions_from_observation"] = False
+        kwargs["exclude_obs_base_pos"] = self.config["train"]["exclude_obs_base_pos"]
+        kwargs["exclude_obs_joint_pos"] = self.config["train"]["exclude_obs_joint_pos"]
+        kwargs["exclude_obs_base_vel"] = self.config["train"]["exclude_obs_base_vel"]
+        kwargs["include_obs_cfrc_ext"] = self.config["train"]["include_obs_cfrc_ext"]
 
         # Configure environment model and training parameters
         kwargs["xml_file"] = self.config["path"]["model_dir_modified"] + "scene.xml"
@@ -362,12 +364,12 @@ class PPOTrainer(PPORunner):
                     continue
                 print(f"[{iobs:>{obs_fill}}-{iobs + obs_len - 1:>{obs_fill}}] > {obs_name}")
                 if obs_name == "qpos":
-                    qpos_str = get_qpos(model, n_fill)[gym_env.unwrapped.observation_structure['skipped_qpos']:]
+                    qpos_str = np.array(get_qpos(model, n_fill))[gym_env.env.env.env.qpos_idx]
                     for i in range(len(qpos_str)):
                         print(f"    [{iobs:>{obs_fill}}] {qpos_str[i]}")
                         iobs += 1
                 elif obs_name == "qvel":
-                    qvel_str = get_qvel(model, n_fill)
+                    qvel_str = np.array(get_qvel(model, n_fill))[gym_env.env.env.env.qvel_idx]
                     for i in range(len(qvel_str)):
                         print(f"    [{iobs:>{obs_fill}}] {qvel_str[i]}")
                         iobs += 1

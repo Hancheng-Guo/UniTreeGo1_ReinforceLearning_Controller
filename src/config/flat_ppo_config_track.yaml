@@ -6,6 +6,10 @@ train:
   total_timesteps: 10240000
   checkpoint_freq: 102400
   custom_log_freq: 2048
+  exclude_obs_base_pos: True
+  exclude_obs_joint_pos: True
+  exclude_obs_base_vel: True
+  include_obs_cfrc_ext: False
   control:
     control_type: "const"
     generator_schedule:
